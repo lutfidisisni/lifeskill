@@ -1,0 +1,5 @@
+{
+  "name": "Aplikasi Life Skill MA NU 01 Banyuputih",
+  "description": "Aplikasi web untuk mengelola pendaftaran dan pelaporan program Life Skill di MA NU 01 Banyuputih. Siswa dapat mendaftar, dan admin dapat mengelola data, melihat dasbor, serta mencetak laporan.",
+  "requestFramePermissions": []
+}
