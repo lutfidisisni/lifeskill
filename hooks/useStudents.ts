@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Student } from '../types';
+import { API_BASE_URL } from '../constants';
 
-const API_URL = 'https://apils.manubanyuputih.id/api/students';
-const CLEAR_ALL_API_URL = 'https://apils.manubanyuputih.id/api/students-clear-all';
+const API_URL = `${API_BASE_URL}/students`;
+const CLEAR_ALL_API_URL = `${API_BASE_URL}/students-clear-all`;
 const STORAGE_KEY = 'manusa_students_data_v2';
 const LEGACY_STORAGE_KEY = 'manusa_students_data_v1';
 

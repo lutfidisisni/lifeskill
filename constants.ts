@@ -3,6 +3,9 @@ import { LifeSkill, CLASS_LEVELS } from './types';
 
 export const APP_LOGO = 'https://iili.io/CuUOpWJ.png';
 
+// Dynamic API Base URL (defaults to relative '/api', or uses VITE_API_URL if provided)
+export const API_BASE_URL = (((import.meta as any).env?.VITE_API_URL as string) || '/api').replace(/\/+$/, '');
+
 export const LIFE_SKILL_OPTIONS: LifeSkill[] = [
     LifeSkill.DESAIN_GRAFIS,
     LifeSkill.OTOMOTIF,

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { LifeSkill, type Student, type ClassLevel } from '../types';
-import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, APP_LOGO } from '../constants';
+import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, APP_LOGO, API_BASE_URL } from '../constants';
 import { StudentModal } from '../components/StudentModal';
 import { useStudents } from '../hooks/useStudents';
 
@@ -73,7 +73,7 @@ export const AdminPage: React.FC = () => {
         if (formValues) {
             try {
                 const token = sessionStorage.getItem('token');
-                const res = await fetch('https://apils.manubanyuputih.id/api/change-credentials', {
+                const res = await fetch(`${API_BASE_URL}/change-credentials`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',

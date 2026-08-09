@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, CLASS_OPTIONS, APP_LOGO } from '../constants';
+import { LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, CLASS_OPTIONS, APP_LOGO, API_BASE_URL } from '../constants';
 import type { LifeSkill, ClassLevel, Gender, Student } from '../types';
 
 declare const Swal: any;
 
-const API_URL = 'https://apils.manubanyuputih.id/api/register';
-const QUOTA_API_URL = 'https://apils.manubanyuputih.id/api/quotas';
+const API_URL = `${API_BASE_URL}/register`;
+const QUOTA_API_URL = `${API_BASE_URL}/quotas`;
 const STORAGE_KEY = 'manusa_students_data_v2';
 const LEGACY_STORAGE_KEY = 'manusa_students_data_v1';
 
