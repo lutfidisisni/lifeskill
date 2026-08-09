@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { LifeSkill, type Student, type ClassLevel } from '../types';
-import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS } from '../constants';
+import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, APP_LOGO } from '../constants';
 import { StudentModal } from '../components/StudentModal';
 import { useStudents } from '../hooks/useStudents';
 
@@ -24,8 +24,108 @@ export const AdminPage: React.FC = () => {
     const [summaryClassFilter, setSummaryClassFilter] = useState<ClassLevel | '' | 'SEMUA'>('');
     const [selectedLifeSkillForAttendance, setSelectedLifeSkillForAttendance] = useState<LifeSkill | ''>('');
 
-    const { students, loading, error, addStudent, updateStudent, deleteStudent } = useStudents();
+    const { students, loading, error, addStudent, updateStudent, deleteStudent, resetToDummyData } = useStudents();
     const navigate = useNavigate();
+
+    const handleChangePassword = async () => {
+        const { value: formValues } = await Swal.fire({
+            title: 'Ganti Akun & Password Admin',
+            html: `
+                <div style="text-align: left; font-size: 13px;" class="space-y-3">
+                    <p style="color: #64748b; margin-bottom: 12px;">Akun default saat ini adalah <b>admin</b> / <b>admin123</b>.</p>
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-weight: 600; color: #334155; display: block; margin-bottom: 4px;">Password Saat Ini (Wajib):</label>
+                        <input id="swal-current-pass" type="password" class="swal2-input" style="margin: 0; width: 100%; font-size: 14px; box-sizing: border-box;" placeholder="Password saat ini" />
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-weight: 600; color: #334155; display: block; margin-bottom: 4px;">Username Baru (Opsional):</label>
+                        <input id="swal-new-user" type="text" class="swal2-input" style="margin: 0; width: 100%; font-size: 14px; box-sizing: border-box;" placeholder="Kosongkan jika tetap" />
+                    </div>
+                    <div style="margin-bottom: 6px;">
+                        <label style="font-weight: 600; color: #334155; display: block; margin-bottom: 4px;">Password Baru (Opsional):</label>
+                        <input id="swal-new-pass" type="password" class="swal2-input" style="margin: 0; width: 100%; font-size: 14px; box-sizing: border-box;" placeholder="Password baru" />
+                    </div>
+                </div>
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Simpan Perubahan',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#4f46e5',
+            cancelButtonColor: '#64748b',
+            preConfirm: () => {
+                const currentPassword = (document.getElementById('swal-current-pass') as HTMLInputElement)?.value;
+                const newUsername = (document.getElementById('swal-new-user') as HTMLInputElement)?.value;
+                const newPassword = (document.getElementById('swal-new-pass') as HTMLInputElement)?.value;
+
+                if (!currentPassword) {
+                    Swal.showValidationMessage('Password saat ini wajib diisi!');
+                    return false;
+                }
+                if (!newUsername && !newPassword) {
+                    Swal.showValidationMessage('Isi minimal Username Baru atau Password Baru!');
+                    return false;
+                }
+                return { currentPassword, newUsername, newPassword };
+            }
+        });
+
+        if (formValues) {
+            try {
+                const token = sessionStorage.getItem('token');
+                const res = await fetch('https://apils.manubanyuputih.id/api/change-credentials', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(formValues)
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.message || 'Gagal mengubah username/password');
+                }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Berhasil!',
+                    text: 'Username / Password berhasil diperbarui di server MySQL.',
+                    confirmButtonColor: '#10b981'
+                });
+            } catch (err: any) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Informasi Kredensial',
+                    text: err.message || 'Kredensial tersimpan. Anda juga dapat mengubah langsung di tabel MySQL `admins` atau via file .env.',
+                });
+            }
+        }
+    };
+
+    const handleResetDummy = () => {
+        Swal.fire({
+            title: 'Muat 20 Data Dummy?',
+            text: 'Ini akan menyetel ulang daftar siswa dengan 20 data dummy lengkap.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#4f46e5',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Ya, Muat Data',
+            cancelButtonText: 'Batal'
+        }).then((result: any) => {
+            if (result.isConfirmed) {
+                resetToDummyData();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Berhasil',
+                    text: '20 Data dummy siswa berhasil dimuat.',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+            }
+        });
+    };
     
     useEffect(() => {
         if(isSidebarOpen) {
@@ -82,7 +182,7 @@ export const AdminPage: React.FC = () => {
                 </head>
                 <body>
                     <div class="kop-sekolah">
-                         <img src="https://manubanyuputih.id/wp-content/uploads/2020/05/cropped-logo-manu-baru-1.png" alt="Logo Sekolah" />
+                         <img src="${APP_LOGO}" alt="Logo Sekolah" />
                          <div class="text-container">
                              <h2>LEMBAGA PENDIDIKAN MAARIF NU</h2>
                              <h3>MA NU 01 BANYUPUTIH</h3>
@@ -109,16 +209,22 @@ export const AdminPage: React.FC = () => {
             `<tr>${headers.map(h => {
                 const val = row[h];
                 const isSignatureColumn = h === 'Tanda Tangan';
-                const cssClass = typeof val === 'number' ? 'class="center"' : (isSignatureColumn ? 'class="signature"' : '');
+                const cssClass = typeof val === 'number' || h.includes('Persentase') || h === 'Status' ? 'class="center"' : (isSignatureColumn ? 'class="signature"' : '');
                 return `<td ${cssClass}>${val}</td>`;
             }).join('')}</tr>`
         ).join('');
 
         let footerRow = '';
         if (includeTotal) {
-            const total = data.reduce((sum, item) => sum + (item['Jumlah Pendaftar'] || 0), 0);
-            if (headers.length > 1) {
-                footerRow = `<tfoot><tr><td colspan="${headers.length - 1}">Total</td><td class="center">${total}</td></tr></tfoot>`;
+            const totalPendaftar = data.reduce((sum, item) => sum + (item['Jumlah Pendaftar'] || 0), 0);
+            const hasQuota = headers.includes('Kuota');
+            if (hasQuota) {
+                const totalQuota = data.reduce((sum, item) => sum + (item['Kuota'] || 0), 0);
+                const totalSisa = data.reduce((sum, item) => sum + (item['Sisa Kuota'] || 0), 0);
+                const overallPercent = totalQuota > 0 ? ((totalPendaftar / totalQuota) * 100).toFixed(1) + '%' : '0%';
+                footerRow = `<tfoot><tr><td></td><td>Total</td><td class="center">${totalPendaftar}</td><td class="center">${totalQuota}</td><td class="center">${totalSisa}</td><td class="center">${overallPercent}</td><td></td></tr></tfoot>`;
+            } else if (headers.length > 1) {
+                footerRow = `<tfoot><tr><td colspan="${headers.length - 1}">Total</td><td class="center">${totalPendaftar}</td></tr></tfoot>`;
             }
         }
 
@@ -463,7 +569,23 @@ export const AdminPage: React.FC = () => {
                 );
             }
             case 'summary': {
-                const summaryByLifeSkill = LIFE_SKILL_OPTIONS.map((ls, index) => ({ "No.": index + 1, "Life Skill": ls, "Jumlah Pendaftar": students.filter(s => s.lifeSkill === ls).length }));
+                const summaryByLifeSkill = LIFE_SKILL_OPTIONS.map((ls, index) => {
+                    const count = students.filter(s => s.lifeSkill === ls || (s.lifeSkill === 'Tata Busana' && ls === LifeSkill.CLOTHING_LINE)).length;
+                    const quota = LIFE_SKILL_QUOTAS[ls];
+                    const remaining = Math.max(0, quota - count);
+                    const percentage = quota > 0 ? ((count / quota) * 100).toFixed(1) + '%' : '0%';
+                    const status = count >= quota ? 'Penuh' : 'Tersedia';
+
+                    return {
+                        "No.": index + 1,
+                        "Life Skill": ls,
+                        "Jumlah Pendaftar": count,
+                        "Kuota": quota,
+                        "Sisa Kuota": remaining,
+                        "Persentase": percentage,
+                        "Status": status,
+                    };
+                });
                 const summaryByClass = CLASS_OPTIONS.map((c, index) => ({ "No.": index + 1, "Kelas": c, "Jumlah Pendaftar": students.filter(s => s.classLevel === c).length }));
                 
                 const handleDetailedSummaryPrint = () => {
@@ -635,7 +757,7 @@ export const AdminPage: React.FC = () => {
             <nav className={`fixed lg:relative inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 flex-shrink-0 flex flex-col transition-transform duration-300 ease-in-out transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 z-30 print-hidden`}>
                 <div className="p-4 border-b border-slate-700/50 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <img src="https://manubanyuputih.id/wp-content/uploads/2020/05/cropped-logo-manu-baru-1.png" alt="Logo Sekolah" className="h-10 w-10" />
+                        <img src={APP_LOGO} alt="Logo Sekolah" className="h-10 w-10 object-contain" referrerPolicy="no-referrer" />
                         <div>
                             <h1 className="text-lg font-bold text-white">Admin Panel</h1>
                             <p className="text-xs text-slate-400">Life Skill MANUSA</p>
@@ -643,12 +765,34 @@ export const AdminPage: React.FC = () => {
                     </div>
                     <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white" aria-label="Tutup menu"><i className="fa-solid fa-xmark fa-lg"></i></button>
                 </div>
-                <ul className="flex-1 p-2">
+                <ul className="flex-1 p-2 space-y-1">
                     <NavItem iconClass="fa-solid fa-grip" text="Dashboard" active={activeView === 'dashboard'} onClick={() => changeView('dashboard')} />
                     <NavItem iconClass="fa-solid fa-users" text="Laporan per Kelas" active={activeView === 'report-class'} onClick={() => changeView('report-class')} />
                     <NavItem iconClass="fa-solid fa-award" text="Laporan Life Skill" active={activeView === 'report-lifeskill'} onClick={() => changeView('report-lifeskill')} />
                     <NavItem iconClass="fa-solid fa-table-list" text="Laporan Rekap" active={activeView === 'summary'} onClick={() => changeView('summary')} />
                     <NavItem iconClass="fa-solid fa-clipboard-user" text="Presensi" active={activeView === 'presensi'} onClick={() => changeView('presensi')} />
+                    
+                    <div className="pt-4 px-2 space-y-2">
+                        <button
+                            type="button"
+                            onClick={handleResetDummy}
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
+                            title="Reset / Muat Ulang 20 Data Dummy Siswa"
+                        >
+                            <i className="fa-solid fa-arrows-rotate text-emerald-400"></i>
+                            <span>Muat 20 Data Dummy</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleChangePassword}
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
+                            title="Ganti Username atau Password Administrator"
+                        >
+                            <i className="fa-solid fa-key text-amber-400"></i>
+                            <span>Ganti Password Admin</span>
+                        </button>
+                    </div>
                 </ul>
                 <div className="p-2 border-t border-slate-700/50">
                     <NavItem iconClass="fa-solid fa-arrow-right-from-bracket" text="Logout" onClick={handleLogout} />
@@ -658,7 +802,7 @@ export const AdminPage: React.FC = () => {
             <div className="flex-1 flex flex-col overflow-y-auto">
                 <header className="sticky top-0 bg-slate-100/80 backdrop-blur-sm z-10 p-2 flex items-center justify-between lg:hidden print-hidden shadow-sm">
                     <div className="flex items-center gap-2">
-                        <img src="https://manubanyuputih.id/wp-content/uploads/2020/05/cropped-logo-manu-baru-1.png" alt="Logo Sekolah" className="h-8 w-8 ml-2" />
+                        <img src={APP_LOGO} alt="Logo Sekolah" className="h-8 w-8 ml-2 object-contain" referrerPolicy="no-referrer" />
                         <span className="font-bold text-slate-700 text-lg">Admin Panel</span>
                     </div>
                     <button onClick={() => setSidebarOpen(true)} className="p-2 mr-2 text-slate-600 hover:text-indigo-600" aria-label="Buka menu"><i className="fa-solid fa-bars fa-lg"></i></button>
@@ -712,7 +856,11 @@ const SummaryTable: React.FC<{
     onDownload: () => void;
 }> = ({title, data, onPrint, onDownload}) => {
     const headers = data.length > 0 ? Object.keys(data[0]) : [];
+    const hasQuota = headers.includes('Kuota');
     const totalPendaftar = data.reduce((sum, item) => sum + (item['Jumlah Pendaftar'] || 0), 0);
+    const totalKuota = data.reduce((sum, item) => sum + (item['Kuota'] || 0), 0);
+    const totalSisa = data.reduce((sum, item) => sum + (item['Sisa Kuota'] || 0), 0);
+    const overallPercent = totalKuota > 0 ? ((totalPendaftar / totalKuota) * 100).toFixed(1) + '%' : '0%';
 
     return(
         <div>
@@ -727,14 +875,32 @@ const SummaryTable: React.FC<{
                 <table className="min-w-full bg-white">
                     <thead className="bg-slate-100">
                         <tr>
-                            {headers.map(header => <th key={header} className={`py-2 px-4 text-left font-semibold text-sm text-slate-600 ${typeof data[0]?.[header] === 'number' ? 'text-center' : 'text-left'}`}>{header}</th>)}
+                            {headers.map(header => (
+                                <th key={header} className={`py-2 px-4 font-semibold text-sm text-slate-600 ${typeof data[0]?.[header] === 'number' || header.includes('Persentase') || header === 'Status' ? 'text-center' : 'text-left'}`}>
+                                    {header}
+                                </th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
                         {data.map((item, index) => (
-                        <tr key={index} className="border-b border-slate-200 last:border-b-0">
-                            {headers.map(header => <td key={header} className={`py-2 px-4 ${typeof item[header] === 'number' ? 'text-center' : 'text-left'}`}>{item[header]}</td>)}
-                        </tr>
+                            <tr key={index} className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50">
+                                {headers.map(header => {
+                                    const val = item[header];
+                                    const isStatus = header === 'Status';
+                                    return (
+                                        <td key={header} className={`py-2 px-4 ${typeof val === 'number' || header.includes('Persentase') || isStatus ? 'text-center' : 'text-left'}`}>
+                                            {isStatus ? (
+                                                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${val === 'Penuh' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                    {val}
+                                                </span>
+                                            ) : (
+                                                val
+                                            )}
+                                        </td>
+                                    );
+                                })}
+                            </tr>
                         ))}
                         {data.length === 0 && (
                            <tr>
@@ -744,10 +910,21 @@ const SummaryTable: React.FC<{
                     </tbody>
                      {data.length > 0 && (
                         <tfoot className="bg-slate-100 font-bold text-slate-800">
-                            <tr>
-                                <td className="py-2 px-4 text-left" colSpan={headers.length - 1}>Total</td>
-                                <td className="py-2 px-4 text-center">{totalPendaftar}</td>
-                            </tr>
+                            {hasQuota ? (
+                                <tr>
+                                    <td className="py-2 px-4 text-left" colSpan={2}>Total</td>
+                                    <td className="py-2 px-4 text-center">{totalPendaftar}</td>
+                                    <td className="py-2 px-4 text-center">{totalKuota}</td>
+                                    <td className="py-2 px-4 text-center">{totalSisa}</td>
+                                    <td className="py-2 px-4 text-center">{overallPercent}</td>
+                                    <td className="py-2 px-4 text-center"></td>
+                                </tr>
+                            ) : (
+                                <tr>
+                                    <td className="py-2 px-4 text-left" colSpan={headers.length - 1}>Total</td>
+                                    <td className="py-2 px-4 text-center">{totalPendaftar}</td>
+                                </tr>
+                            )}
                         </tfoot>
                     )}
                 </table>
@@ -794,26 +971,30 @@ const DynamicSummaryTable: React.FC<{
     );
 };
 
-const StatCard: React.FC<{title: string, value: string | number, color: string}> = ({title, value, color}) => (
+const StatCard: React.FC<{title: string, value: string | number, color: string, subValue?: string}> = ({title, value, color, subValue}) => (
     <div className={`bg-white p-6 rounded-lg shadow-md border-l-4 ${color}`}>
         <h3 className="text-base font-medium text-slate-500">{title}</h3>
         <p className="text-3xl font-bold text-slate-800 mt-2">{value}</p>
+        {subValue && <p className="text-xs text-slate-500 mt-1">{subValue}</p>}
     </div>
 )
 
 const DashboardView: React.FC<{students: Student[]; isLoading: boolean}> = ({ students, isLoading }) => {
     const totalStudents = students.length;
+    const totalCapacity = 285;
+    const totalRemaining = Math.max(0, totalCapacity - totalStudents);
     const totalMale = students.filter(s => s.jenisKelamin === 'Laki-laki').length;
     const totalFemale = students.filter(s => s.jenisKelamin === 'Perempuan').length;
 
     const dataByLifeSkill = useMemo(() => {
-        const counts = students.reduce((acc, s) => {
-            if (s.lifeSkill) {
-               acc[s.lifeSkill] = (acc[s.lifeSkill] || 0) + 1;
-            }
-            return acc;
-        }, {} as Record<LifeSkill, number>);
-        return Object.entries(counts).map(([name, value]) => ({ name, value }));
+        return LIFE_SKILL_OPTIONS.map(skill => {
+            const count = students.filter(s => s.lifeSkill === skill || (s.lifeSkill === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
+            return {
+                name: skill,
+                value: count,
+                quota: LIFE_SKILL_QUOTAS[skill]
+            };
+        });
     }, [students]);
 
     const dataByClass = useMemo(() => {
@@ -838,13 +1019,80 @@ const DashboardView: React.FC<{students: Student[]; isLoading: boolean}> = ({ st
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <h2 className="text-3xl font-bold text-slate-800">Dashboard</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard title="Total Pendaftar" value={totalStudents} color="border-indigo-500" />
-                <StatCard title="Total Laki-laki" value={totalMale} color="border-blue-500" />
-                <StatCard title="Total Perempuan" value={totalFemale} color="border-pink-500" />
-                <StatCard title="Pilihan Life Skill" value={LIFE_SKILL_OPTIONS.length} color="border-teal-500" />
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <h2 className="text-3xl font-bold text-slate-800">Dashboard</h2>
+                <div className="text-sm font-medium text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                    Kapasitas Pendaftaran: <span className="font-bold text-indigo-600">{totalStudents}</span> / {totalCapacity} Siswa ({((totalStudents / totalCapacity) * 100).toFixed(1)}%)
+                </div>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard 
+                    title="Total Pendaftar" 
+                    value={`${totalStudents} / ${totalCapacity}`} 
+                    subValue={`Terisi ${((totalStudents / totalCapacity) * 100).toFixed(1)}%`}
+                    color="border-indigo-500" 
+                />
+                <StatCard 
+                    title="Sisa Kuota Total" 
+                    value={`${totalRemaining} Kursi`} 
+                    subValue="Dari total 6 program"
+                    color="border-emerald-500" 
+                />
+                <StatCard 
+                    title="Total Laki-laki" 
+                    value={totalMale} 
+                    subValue={`${totalStudents > 0 ? ((totalMale / totalStudents) * 100).toFixed(1) : 0}% pendaftar`}
+                    color="border-blue-500" 
+                />
+                <StatCard 
+                    title="Total Perempuan" 
+                    value={totalFemale} 
+                    subValue={`${totalStudents > 0 ? ((totalFemale / totalStudents) * 100).toFixed(1) : 0}% pendaftar`}
+                    color="border-pink-500" 
+                />
+            </div>
+
+            {/* Quota Fulfillment Breakdown */}
+            <div className="bg-white p-6 rounded-lg shadow-md">
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="text-xl font-semibold text-slate-800">Status Pemenuhan Kuota Life Skill</h3>
+                        <p className="text-sm text-slate-500">Monitoring pengisian kuota untuk setiap program keterampilan</p>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {LIFE_SKILL_OPTIONS.map((skill, index) => {
+                        const count = students.filter(s => s.lifeSkill === skill || (s.lifeSkill === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
+                        const quota = LIFE_SKILL_QUOTAS[skill];
+                        const remaining = Math.max(0, quota - count);
+                        const percentage = Math.min(100, quota > 0 ? (count / quota) * 100 : 0);
+                        const isFull = count >= quota;
+
+                        return (
+                            <div key={skill} className="p-4 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:shadow-sm transition-all">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="font-semibold text-slate-800 text-sm">{skill}</span>
+                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${isFull ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                        {isFull ? 'PENUH' : `Sisa ${remaining}`}
+                                    </span>
+                                </div>
+                                <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden mb-2">
+                                    <div 
+                                        className={`h-2.5 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : percentage > 75 ? 'bg-amber-500' : 'bg-indigo-600'}`}
+                                        style={{ width: `${percentage}%` }}
+                                    ></div>
+                                </div>
+                                <div className="flex justify-between text-xs text-slate-600 font-medium">
+                                    <span>{count} / {quota} Siswa</span>
+                                    <span>{percentage.toFixed(1)}%</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                 <div className="lg:col-span-3 bg-white p-6 rounded-lg shadow-md">
                     <h3 className="text-xl font-semibold mb-4 text-slate-700">Pendaftar per Kelas</h3>
@@ -859,15 +1107,24 @@ const DashboardView: React.FC<{students: Student[]; isLoading: boolean}> = ({ st
                     </ResponsiveContainer>
                 </div>
                 <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
-                     <h3 className="text-xl font-semibold mb-4 text-slate-700">Distribusi Life Skill</h3>
+                     <h3 className="text-xl font-semibold mb-4 text-slate-700">Distribusi Pilihan Life Skill</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <PieChart>
-                            <Pie data={dataByLifeSkill} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                                const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                                const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
-                                const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
-                                return (percent > 0.05) ? <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold">{(percent * 100).toFixed(0)}%</text> : null;
-                            }}>
+                            <Pie 
+                                data={dataByLifeSkill.filter(d => d.value > 0)} 
+                                dataKey="value" 
+                                nameKey="name" 
+                                cx="50%" 
+                                cy="50%" 
+                                outerRadius={100} 
+                                labelLine={false} 
+                                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                    const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+                                    const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+                                    return (percent > 0.05) ? <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold">{(percent * 100).toFixed(0)}%</text> : null;
+                                }}
+                            >
                                 {dataByLifeSkill.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="white" strokeWidth={2} />)}
                             </Pie>
                             <Tooltip wrapperClassName="!border-slate-300 !bg-white/80 !backdrop-blur-sm !rounded-lg" />

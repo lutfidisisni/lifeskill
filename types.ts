@@ -1,10 +1,10 @@
 export enum LifeSkill {
-    TATA_RIAS = "Tata Rias",
-    TATA_BOGA = "Tata Boga",
-    TATA_BUSANA = "Tata Busana",
-    SETIR_MOBIL = "Setir Mobil",
     DESAIN_GRAFIS = "Desain Grafis",
     OTOMOTIF = "Otomotif",
+    TATA_BOGA = "Tata Boga",
+    CLOTHING_LINE = "Clothing Line",
+    SETIR_MOBIL = "Setir Mobil",
+    TATA_RIAS = "Tata Rias",
 }
 
 export const CLASS_LEVELS = [
@@ -25,4 +25,13 @@ export interface Student {
     jenisKelamin: Gender;
     createdAt?: string;
     updatedAt?: string;
+}
+
+export interface QuotaStatus {
+    skill: LifeSkill;
+    quota: number;
+    registered: number;
+    remaining: number;
+    isFull: boolean;
+    percentage: number;
 }

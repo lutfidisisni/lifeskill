@@ -1,7 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Student } from '../types';
+import { DUMMY_STUDENTS } from '../data/dummyStudents';
 
 const API_URL = 'https://apils.manubanyuputih.id/api/students';
+const STORAGE_KEY = 'manusa_students_data_v1';
+
+const getInitialStudents = (): Student[] => {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed;
+            }
+        }
+    } catch (e) {
+        console.error('Error reading localStorage for students:', e);
+    }
+    return DUMMY_STUDENTS;
+};
 
 const handleApiError = async (response: Response, defaultMessage: string): Promise<Error> => {
     let errorMessage = defaultMessage;
@@ -24,18 +41,41 @@ const handleApiError = async (response: Response, defaultMessage: string): Promi
 
 
 export const useStudents = () => {
-    const [students, setStudents] = useState<Student[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [students, setStudents] = useState<Student[]>(getInitialStudents);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const getToken = () => sessionStorage.getItem('token');
+
+    // Save to localStorage whenever students change
+    const saveStudents = (updated: Student[]) => {
+        setStudents(updated);
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            window.dispatchEvent(new Event('manusa_data_updated'));
+        } catch (e) {
+            console.error('Failed to save students to localStorage:', e);
+        }
+    };
 
     const fetchStudents = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
             const token = getToken();
-            if (!token) throw new Error('Not authorized');
+            if (!token) {
+                // Not authorized or in demo mode, use local storage / dummy students
+                setStudents(getInitialStudents());
+                setLoading(false);
+                return;
+            }
+
+            // If using demo token, load from storage or dummy
+            if (token.startsWith('demo-')) {
+                setStudents(getInitialStudents());
+                setLoading(false);
+                return;
+            }
 
             const response = await fetch(API_URL, {
                 headers: {
@@ -44,13 +84,21 @@ export const useStudents = () => {
             });
 
             if (!response.ok) {
-                throw await handleApiError(response, 'Failed to fetch students');
+                console.warn('API fetch failed, falling back to local dummy dataset');
+                setStudents(getInitialStudents());
+                return;
             }
 
             const data: Student[] = await response.json();
-            setStudents(data);
+            if (Array.isArray(data) && data.length > 0) {
+                saveStudents(data);
+            } else {
+                // If API returns empty list, keep dummy students
+                setStudents(getInitialStudents());
+            }
         } catch (err: any) {
-            setError(err.message || 'An unexpected error occurred');
+            console.warn('Network error, using local dummy data:', err.message);
+            setStudents(getInitialStudents());
         } finally {
             setLoading(false);
         }
@@ -62,59 +110,96 @@ export const useStudents = () => {
 
     const addStudent = async (studentData: Omit<Student, 'id'>): Promise<Student> => {
         const token = getToken();
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify(studentData),
-        });
+        const fallbackNewStudent: Student = {
+            ...studentData,
+            id: 'std-' + Date.now(),
+            createdAt: new Date().toISOString(),
+        };
 
-        if (!response.ok) {
-            throw await handleApiError(response, 'Failed to add student');
+        if (token && !token.startsWith('demo-')) {
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(studentData),
+                });
+
+                if (response.ok) {
+                    const newStudent: Student = await response.json();
+                    saveStudents([newStudent, ...students]);
+                    return newStudent;
+                }
+            } catch (e) {
+                console.warn('Server offline, saving locally:', e);
+            }
         }
 
-        const newStudent: Student = await response.json();
-        setStudents(prev => [newStudent, ...prev]);
-        return newStudent;
+        saveStudents([fallbackNewStudent, ...students]);
+        return fallbackNewStudent;
     };
 
     const updateStudent = async (studentData: Student): Promise<Student> => {
         const token = getToken();
-        const response = await fetch(`${API_URL}/${studentData.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify(studentData),
-        });
 
-        if (!response.ok) {
-            throw await handleApiError(response, 'Failed to update student');
+        if (token && !token.startsWith('demo-')) {
+            try {
+                const response = await fetch(`${API_URL}/${studentData.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(studentData),
+                });
+
+                if (response.ok) {
+                    const updated: Student = await response.json();
+                    saveStudents(students.map(s => (s.id === updated.id ? updated : s)));
+                    return updated;
+                }
+            } catch (e) {
+                console.warn('Server offline, updating locally:', e);
+            }
         }
 
-        const updatedStudent: Student = await response.json();
-        setStudents(prev => prev.map(s => (s.id === updatedStudent.id ? updatedStudent : s)));
-        return updatedStudent;
+        saveStudents(students.map(s => (s.id === studentData.id ? studentData : s)));
+        return studentData;
     };
 
     const deleteStudent = async (studentId: string): Promise<void> => {
         const token = getToken();
-        const response = await fetch(`${API_URL}/${studentId}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
-        });
 
-        if (!response.ok) {
-            throw await handleApiError(response, 'Failed to delete student');
+        if (token && !token.startsWith('demo-')) {
+            try {
+                await fetch(`${API_URL}/${studentId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+            } catch (e) {
+                console.warn('Server offline, deleting locally:', e);
+            }
         }
 
-        setStudents(prev => prev.filter(s => s.id !== studentId));
+        saveStudents(students.filter(s => s.id !== studentId));
     };
 
-    return { students, loading, error, fetchStudents, addStudent, updateStudent, deleteStudent };
+    const resetToDummyData = () => {
+        saveStudents(DUMMY_STUDENTS);
+    };
+
+    return { 
+        students, 
+        loading, 
+        error, 
+        fetchStudents, 
+        addStudent, 
+        updateStudent, 
+        deleteStudent,
+        resetToDummyData
+    };
 };

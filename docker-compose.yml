@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # 1. Frontend Web (React SPA + Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lifeskill_frontend
+    restart: always
+    ports:
+      # Port 8092 AMAN (tidak bentrok dengan 8085, 8086, 8088, 8089, 8090, 8091, 8095)
+      - "8092:80"
+    depends_on:
+      - backend
+    networks:
+      - lifeskill_network
+
+  # 2. Backend API (Node.js Express)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lifeskill_backend
+    restart: always
+    ports:
+      # Port 8087 AMAN (tidak bentrok dengan 8085, 8086, 8088, 8089, 8090, 8091)
+      - "8087:5000"
+    environment:
+      - PORT=5000
+      - DB_HOST=mysql_db
+      - DB_USER=lifeskill_user
+      - DB_PASSWORD=lifeskill_secret
+      - DB_NAME=lifeskill_manusa
+      - JWT_SECRET=super_secret_jwt_key_lifeskill_2026
+    depends_on:
+      - mysql_db
+    networks:
+      - lifeskill_network
+
+  # 3. Database MySQL
+  mysql_db:
+    image: mysql:8.0
+    container_name: lifeskill_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_lifeskill_secret
+      MYSQL_DATABASE: lifeskill_manusa
+      MYSQL_USER: lifeskill_user
+      MYSQL_PASSWORD: lifeskill_secret
+    ports:
+      # Port 3311 AMAN (tidak bentrok dengan 3308, 3309, 3310, 3385)
+      - "3311:3306"
+    volumes:
+      - lifeskill_db_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - lifeskill_network
+
+volumes:
+  lifeskill_db_data:
+
+networks:
+  lifeskill_network:
+    driver: bridge

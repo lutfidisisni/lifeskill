@@ -2,6 +2,58 @@
 const db = require('../config/db');
 const { randomUUID } = require('crypto');
 
+const LIFE_SKILL_QUOTAS = {
+    'Desain Grafis': 35,
+    'Otomotif': 42,
+    'Tata Boga': 70,
+    'Clothing Line': 35,
+    'Setir Mobil': 63,
+    'Tata Rias': 40
+};
+
+// @desc    Get quota status for all life skills
+// @route   GET /api/quotas
+// @access  Public
+const getQuotas = async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT 
+                CASE 
+                    WHEN lifeSkill = 'Tata Busana' THEN 'Clothing Line'
+                    ELSE lifeSkill 
+                END as skill,
+                COUNT(*) as count 
+            FROM students 
+            GROUP BY skill
+        `);
+
+        const registeredMap = {};
+        rows.forEach(r => {
+            if (r.skill) {
+                registeredMap[r.skill] = (registeredMap[r.skill] || 0) + Number(r.count);
+            }
+        });
+
+        const quotas = Object.keys(LIFE_SKILL_QUOTAS).map(skill => {
+            const quota = LIFE_SKILL_QUOTAS[skill];
+            const registered = registeredMap[skill] || 0;
+            const remaining = Math.max(0, quota - registered);
+            return {
+                skill,
+                quota,
+                registered,
+                remaining,
+                isFull: registered >= quota
+            };
+        });
+
+        res.json(quotas);
+    } catch (error) {
+        console.error('Get quotas error:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
 // @desc    Get all students
 // @route   GET /api/students
 // @access  Private
@@ -25,11 +77,26 @@ const registerStudent = async (req, res) => {
         return res.status(400).json({ message: 'Mohon lengkapi semua kolom isian.' });
     }
 
-    const id = randomUUID();
+    const normalizedSkill = lifeSkill === 'Tata Busana' ? 'Clothing Line' : lifeSkill;
+    const quotaLimit = LIFE_SKILL_QUOTAS[normalizedSkill];
 
     try {
+        if (quotaLimit !== undefined) {
+            const [countResult] = await db.query(
+                'SELECT COUNT(*) as count FROM students WHERE lifeSkill = ? OR (lifeSkill = "Tata Busana" AND ? = "Clothing Line")',
+                [normalizedSkill, normalizedSkill]
+            );
+            const currentCount = countResult[0]?.count || 0;
+            if (currentCount >= quotaLimit) {
+                return res.status(400).json({
+                    message: `Mohon maaf, kuota untuk program Life Skill "${normalizedSkill}" telah penuh (${quotaLimit}/${quotaLimit} siswa). Silakan pilih program lain yang masih tersedia.`
+                });
+            }
+        }
+
+        const id = randomUUID();
         const query = 'INSERT INTO students (id, fullName, classLevel, whatsappNumber, jenisKelamin, lifeSkill) VALUES (?, ?, ?, ?, ?, ?)';
-        await db.execute(query, [id, fullName, classLevel, whatsappNumber, jenisKelamin, lifeSkill]);
+        await db.execute(query, [id, fullName, classLevel, whatsappNumber, jenisKelamin, normalizedSkill]);
         
         const [newStudent] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
         res.status(201).json(newStudent[0]);
@@ -50,16 +117,16 @@ const addStudent = async (req, res) => {
         return res.status(400).json({ message: 'Please fill all fields' });
     }
 
+    const normalizedSkill = lifeSkill === 'Tata Busana' ? 'Clothing Line' : lifeSkill;
     const id = randomUUID();
 
     try {
         const query = 'INSERT INTO students (id, fullName, classLevel, whatsappNumber, lifeSkill, jenisKelamin) VALUES (?, ?, ?, ?, ?, ?)';
-        await db.execute(query, [id, fullName, classLevel, whatsappNumber, lifeSkill, jenisKelamin]);
+        await db.execute(query, [id, fullName, classLevel, whatsappNumber, normalizedSkill, jenisKelamin]);
         
         const [newStudent] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
         res.status(201).json(newStudent[0]);
-    } catch (error)
-     {
+    } catch (error) {
         console.error('Admin add student error:', error);
         res.status(500).json({ message: 'Server Error' });
     }
@@ -76,9 +143,11 @@ const updateStudent = async (req, res) => {
         return res.status(400).json({ message: 'Please fill all fields' });
     }
 
+    const normalizedSkill = lifeSkill === 'Tata Busana' ? 'Clothing Line' : lifeSkill;
+
     try {
         const query = 'UPDATE students SET fullName = ?, classLevel = ?, whatsappNumber = ?, lifeSkill = ?, jenisKelamin = ? WHERE id = ?';
-        const [result] = await db.execute(query, [fullName, classLevel, whatsappNumber, lifeSkill, jenisKelamin, id]);
+        const [result] = await db.execute(query, [fullName, classLevel, whatsappNumber, normalizedSkill, jenisKelamin, id]);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Student not found' });
@@ -112,6 +181,7 @@ const deleteStudent = async (req, res) => {
 };
 
 module.exports = {
+    getQuotas,
     getStudents,
     registerStudent,
     addStudent,

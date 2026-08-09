@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { Student, ClassLevel, LifeSkill, Gender } from '../types';
-import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS } from '../constants';
+import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS } from '../constants';
 
 interface StudentModalProps {
     isOpen: boolean;
@@ -104,7 +104,11 @@ export const StudentModal: React.FC<StudentModalProps> = ({ isOpen, onClose, onS
                         <label htmlFor="modalLifeSkill" className="block text-sm font-medium text-slate-700">Pilihan Life Skill</label>
                         <select id="modalLifeSkill" value={lifeSkill} onChange={(e) => setLifeSkill(e.target.value as LifeSkill)} className={`mt-1 w-full px-3 py-2 border ${errors.lifeSkill ? 'border-red-500' : 'border-slate-300'} rounded-md bg-white focus:ring-2 focus:ring-indigo-500`}>
                             <option value="" disabled>Pilih Life Skill</option>
-                            {LIFE_SKILL_OPTIONS.map(ls => <option key={ls} value={ls}>{ls}</option>)}
+                            {LIFE_SKILL_OPTIONS.map(ls => (
+                                <option key={ls} value={ls}>
+                                    {ls} (Kuota: {LIFE_SKILL_QUOTAS[ls]})
+                                </option>
+                            ))}
                         </select>
                         {errors.lifeSkill && <p className="text-red-500 text-xs mt-1">{errors.lifeSkill}</p>}
                     </div>
