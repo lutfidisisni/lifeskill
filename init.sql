@@ -28,5 +28,7 @@ CREATE TABLE IF NOT EXISTS admins (
 -- 3. Akun Admin Awal:
 --    Username: admin
 --    Password: admin123
-INSERT IGNORE INTO admins (id, username, password) 
-VALUES (1, 'admin', '$2a$10$fV/F0sq8SoH9a/aA.p2sR.Xq9R3OAxWzYJt.N2uK.ft4V.9dGg.8u');
+INSERT INTO admins (id, username, password) 
+VALUES (1, 'admin', '$2a$10$mJfMzy45ZC3qaM.FnjgmNuXvgk8aB3jfyJvG3a4R4qE7PFvl0O73a')
+ON DUPLICATE KEY UPDATE password = '$2a$10$mJfMzy45ZC3qaM.FnjgmNuXvgk8aB3jfyJvG3a4R4qE7PFvl0O73a';
+

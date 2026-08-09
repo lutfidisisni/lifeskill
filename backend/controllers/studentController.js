@@ -11,12 +11,34 @@ const LIFE_SKILL_QUOTAS = {
     'Tata Rias': 40
 };
 
+// Helper to ensure students table exists
+const ensureStudentsTable = async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS students (
+                id VARCHAR(50) PRIMARY KEY,
+                fullName VARCHAR(255) NOT NULL,
+                classLevel VARCHAR(20) NOT NULL,
+                whatsappNumber VARCHAR(30) NOT NULL,
+                lifeSkill VARCHAR(100) NOT NULL,
+                jenisKelamin ENUM('Laki-laki', 'Perempuan') NOT NULL,
+                createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        `);
+    } catch (err) {
+        console.warn('ensureStudentsTable warning:', err.message);
+    }
+};
+
 // @desc    Get quota status for all life skills
 // @route   GET /api/quotas
 // @access  Public
 const getQuotas = async (req, res) => {
     try {
+        await ensureStudentsTable();
         const [rows] = await db.query(`
+
             SELECT 
                 CASE 
                     WHEN lifeSkill = 'Tata Busana' THEN 'Clothing Line'
@@ -59,6 +81,7 @@ const getQuotas = async (req, res) => {
 // @access  Private
 const getStudents = async (req, res) => {
     try {
+        await ensureStudentsTable();
         const [rows] = await db.query('SELECT * FROM students ORDER BY fullName ASC');
         res.json(rows);
     } catch (error) {
@@ -81,6 +104,7 @@ const registerStudent = async (req, res) => {
     const quotaLimit = LIFE_SKILL_QUOTAS[normalizedSkill];
 
     try {
+        await ensureStudentsTable();
         if (quotaLimit !== undefined) {
             const [countResult] = await db.query(
                 'SELECT COUNT(*) as count FROM students WHERE lifeSkill = ? OR (lifeSkill = "Tata Busana" AND ? = "Clothing Line")',
@@ -121,6 +145,7 @@ const addStudent = async (req, res) => {
     const id = randomUUID();
 
     try {
+        await ensureStudentsTable();
         const query = 'INSERT INTO students (id, fullName, classLevel, whatsappNumber, lifeSkill, jenisKelamin) VALUES (?, ?, ?, ?, ?, ?)';
         await db.execute(query, [id, fullName, classLevel, whatsappNumber, normalizedSkill, jenisKelamin]);
         
@@ -146,6 +171,7 @@ const updateStudent = async (req, res) => {
     const normalizedSkill = lifeSkill === 'Tata Busana' ? 'Clothing Line' : lifeSkill;
 
     try {
+        await ensureStudentsTable();
         const query = 'UPDATE students SET fullName = ?, classLevel = ?, whatsappNumber = ?, lifeSkill = ?, jenisKelamin = ? WHERE id = ?';
         const [result] = await db.execute(query, [fullName, classLevel, whatsappNumber, normalizedSkill, jenisKelamin, id]);
 
@@ -167,6 +193,7 @@ const updateStudent = async (req, res) => {
 const deleteStudent = async (req, res) => {
     const { id } = req.params;
     try {
+        await ensureStudentsTable();
         const [result] = await db.execute('DELETE FROM students WHERE id = ?', [id]);
         
         if (result.affectedRows === 0) {
@@ -185,6 +212,7 @@ const deleteStudent = async (req, res) => {
 // @access  Private
 const clearAllStudents = async (req, res) => {
     try {
+        await ensureStudentsTable();
         await db.execute('DELETE FROM students');
         res.json({ message: 'Semua data siswa berhasil dibersihkan' });
     } catch (error) {

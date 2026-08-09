@@ -18,48 +18,57 @@ const app = express();
 app.use(cors());
 app.use(express.json()); // Body parser
 
-// Auto-initialize tables and default admin if not exist
-async function initDatabase() {
-    try {
-        const connection = await db.getConnection();
-        console.log('MySQL Connected successfully...');
+// Auto-initialize tables and default admin with retry mechanism
+const DEFAULT_ADMIN_HASH = '$2a$10$mJfMzy45ZC3qaM.FnjgmNuXvgk8aB3jfyJvG3a4R4qE7PFvl0O73a'; // 'admin123'
 
-        // 1. Table students
-        await connection.query(`
-            CREATE TABLE IF NOT EXISTS students (
-                id VARCHAR(50) PRIMARY KEY,
-                fullName VARCHAR(255) NOT NULL,
-                classLevel VARCHAR(20) NOT NULL,
-                whatsappNumber VARCHAR(30) NOT NULL,
-                lifeSkill VARCHAR(100) NOT NULL,
-                jenisKelamin ENUM('Laki-laki', 'Perempuan') NOT NULL,
-                createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        `);
+async function initDatabase(maxRetries = 20, delayMs = 3000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            console.log(`Attempting to connect to MySQL database (attempt ${attempt}/${maxRetries})...`);
+            const connection = await db.getConnection();
+            console.log('MySQL Connected successfully...');
 
-        // 2. Table admins
-        await connection.query(`
-            CREATE TABLE IF NOT EXISTS admins (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(100) NOT NULL UNIQUE,
-                password VARCHAR(255) NOT NULL,
-                createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+            // 1. Table students
+            await connection.query(`
+                CREATE TABLE IF NOT EXISTS students (
+                    id VARCHAR(50) PRIMARY KEY,
+                    fullName VARCHAR(255) NOT NULL,
+                    classLevel VARCHAR(20) NOT NULL,
+                    whatsappNumber VARCHAR(30) NOT NULL,
+                    lifeSkill VARCHAR(100) NOT NULL,
+                    jenisKelamin ENUM('Laki-laki', 'Perempuan') NOT NULL,
+                    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            `);
 
-        // 3. Ensure default admin exists if empty
-        const [adminRows] = await connection.query('SELECT COUNT(*) as count FROM admins');
-        if (adminRows[0].count === 0) {
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('admin123', salt);
-            await connection.query('INSERT INTO admins (username, password) VALUES (?, ?)', ['admin', hashedPassword]);
-            console.log('Default admin created: username=admin, password=admin123');
+            // 2. Table admins
+            await connection.query(`
+                CREATE TABLE IF NOT EXISTS admins (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(100) NOT NULL UNIQUE,
+                    password VARCHAR(255) NOT NULL,
+                    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            // 3. Ensure default admin exists
+            const [adminRows] = await connection.query('SELECT COUNT(*) as count FROM admins');
+            if (adminRows[0].count === 0) {
+                await connection.query('INSERT INTO admins (username, password) VALUES (?, ?)', ['admin', DEFAULT_ADMIN_HASH]);
+                console.log('Default admin created: username=admin, password=admin123');
+            }
+
+            connection.release();
+            return; // Successfully initialized
+        } catch (err) {
+            console.warn(`Database connection attempt ${attempt} failed: ${err.message}`);
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            } else {
+                console.error('All database connection attempts exhausted. Server will continue and retry on incoming requests.');
+            }
         }
-
-        connection.release();
-    } catch (err) {
-        console.error('Database initialization warning:', err.message);
     }
 }
 
