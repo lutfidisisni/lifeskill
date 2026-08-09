@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, CLASS_OPTIONS, APP_LOGO } from '../constants';
 import type { LifeSkill, ClassLevel, Gender, Student } from '../types';
-import { DUMMY_STUDENTS } from '../data/dummyStudents';
 
 declare const Swal: any;
 
@@ -21,7 +20,7 @@ const SKILL_ICONS: Record<string, { icon: string; bg: string; text: string }> = 
 
 // Calculate quota counts from local student list
 const calculateLocalQuotaCounts = (): Record<string, number> => {
-    let studentList: Student[] = DUMMY_STUDENTS;
+    let studentList: Student[] = [];
     try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
@@ -197,7 +196,7 @@ export const RegistrationPage: React.FC = () => {
             // Save to local storage for instantaneous sync across all views
             try {
                 const existingStr = localStorage.getItem(STORAGE_KEY);
-                const currentStudents: Student[] = existingStr ? JSON.parse(existingStr) : DUMMY_STUDENTS;
+                const currentStudents: Student[] = existingStr ? JSON.parse(existingStr) : [];
                 const updatedList = [newStudentData, ...currentStudents];
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
                 window.dispatchEvent(new Event('manusa_data_updated'));

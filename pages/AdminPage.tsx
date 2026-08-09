@@ -24,7 +24,7 @@ export const AdminPage: React.FC = () => {
     const [summaryClassFilter, setSummaryClassFilter] = useState<ClassLevel | '' | 'SEMUA'>('');
     const [selectedLifeSkillForAttendance, setSelectedLifeSkillForAttendance] = useState<LifeSkill | ''>('');
 
-    const { students, loading, error, addStudent, updateStudent, deleteStudent, resetToDummyData } = useStudents();
+    const { students, loading, error, addStudent, updateStudent, deleteStudent, fetchStudents } = useStudents();
     const navigate = useNavigate();
 
     const handleChangePassword = async () => {
@@ -103,27 +103,14 @@ export const AdminPage: React.FC = () => {
         }
     };
 
-    const handleResetDummy = () => {
+    const handleRefreshData = async () => {
+        await fetchStudents();
         Swal.fire({
-            title: 'Muat 20 Data Dummy?',
-            text: 'Ini akan menyetel ulang daftar siswa dengan 20 data dummy lengkap.',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#4f46e5',
-            cancelButtonColor: '#64748b',
-            confirmButtonText: 'Ya, Muat Data',
-            cancelButtonText: 'Batal'
-        }).then((result: any) => {
-            if (result.isConfirmed) {
-                resetToDummyData();
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Berhasil',
-                    text: '20 Data dummy siswa berhasil dimuat.',
-                    timer: 1500,
-                    showConfirmButton: false
-                });
-            }
+            icon: 'success',
+            title: 'Sinkronisasi Selesai',
+            text: 'Data pendaftar telah dimuat ulang dari database server.',
+            timer: 1500,
+            showConfirmButton: false
         });
     };
     
@@ -775,12 +762,12 @@ export const AdminPage: React.FC = () => {
                     <div className="pt-4 px-2 space-y-2">
                         <button
                             type="button"
-                            onClick={handleResetDummy}
+                            onClick={handleRefreshData}
                             className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
-                            title="Reset / Muat Ulang 20 Data Dummy Siswa"
+                            title="Muat Ulang / Sinkronkan Data dari Database Server"
                         >
                             <i className="fa-solid fa-arrows-rotate text-emerald-400"></i>
-                            <span>Muat 20 Data Dummy</span>
+                            <span>Refresh Data Server</span>
                         </button>
 
                         <button

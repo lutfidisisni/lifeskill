@@ -17,21 +17,13 @@ export const LoginPage: React.FC = () => {
         e.preventDefault();
         setLoading(true);
 
-        // Demo credential direct pass
-        if (username === 'admin' && password === 'admin123') {
-            sessionStorage.setItem('token', 'demo-admin-token-lsmanusa');
-            navigate('/admin');
-            setLoading(false);
-            return;
-        }
-
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ username: username.trim(), password: password.trim() }),
             });
 
             if (!response.ok) {
@@ -44,8 +36,8 @@ export const LoginPage: React.FC = () => {
                     } else {
                         const errorText = await response.text();
                         console.error("Server returned non-JSON response:", errorText);
-                         if (response.status === 404) {
-                            errorMessage = 'Endpoint API tidak ditemukan. Periksa konfigurasi server.';
+                        if (response.status === 404) {
+                            errorMessage = 'Endpoint API tidak ditemukan. Pastikan backend server aktif.';
                         } else {
                             errorMessage = `Terjadi masalah pada server (status: ${response.status}). Coba lagi nanti.`;
                         }
@@ -59,17 +51,14 @@ export const LoginPage: React.FC = () => {
 
             const data = await response.json();
             
-            sessionStorage.setItem('token', data.token || 'demo-admin-token-lsmanusa');
-            navigate('/admin');
-
-        } catch (error: any) {
-            // If offline / network error and credentials are standard demo
-            if (username === 'admin' && password === 'admin123') {
-                sessionStorage.setItem('token', 'demo-admin-token-lsmanusa');
+            if (data.token) {
+                sessionStorage.setItem('token', data.token);
                 navigate('/admin');
-                return;
+            } else {
+                throw new Error('Token otentikasi tidak diterima dari server.');
             }
 
+        } catch (error: any) {
             Swal.fire({
                 icon: 'error',
                 title: 'Login Gagal',
@@ -134,10 +123,19 @@ export const LoginPage: React.FC = () => {
                                 </button>
                             </div>
                         </div>
-                        <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 disabled:bg-indigo-400 disabled:cursor-not-allowed">
-                             {loading ? 'Memproses...' : 'Login'}
+                        <button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 disabled:bg-indigo-400 disabled:cursor-not-allowed shadow-md">
+                             {loading ? 'Memproses...' : 'Login ke Panel Admin'}
                         </button>
                     </form>
+
+                    <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+                        <p className="text-xs text-slate-500 font-medium">
+                            Akun default pertama kali: <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded font-bold">admin</span> / <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded font-bold">admin123</span>
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                            Password & username dapat diubah di menu Admin setelah login.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

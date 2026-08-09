@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Student } from '../types';
-import { DUMMY_STUDENTS } from '../data/dummyStudents';
 
 const API_URL = 'https://apils.manubanyuputih.id/api/students';
 const STORAGE_KEY = 'manusa_students_data_v1';
@@ -10,14 +9,14 @@ const getInitialStudents = (): Student[] => {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) {
+            if (Array.isArray(parsed)) {
                 return parsed;
             }
         }
     } catch (e) {
         console.error('Error reading localStorage for students:', e);
     }
-    return DUMMY_STUDENTS;
+    return [];
 };
 
 const handleApiError = async (response: Response, defaultMessage: string): Promise<Error> => {
@@ -64,14 +63,6 @@ export const useStudents = () => {
         try {
             const token = getToken();
             if (!token) {
-                // Not authorized or in demo mode, use local storage / dummy students
-                setStudents(getInitialStudents());
-                setLoading(false);
-                return;
-            }
-
-            // If using demo token, load from storage or dummy
-            if (token.startsWith('demo-')) {
                 setStudents(getInitialStudents());
                 setLoading(false);
                 return;
@@ -84,20 +75,17 @@ export const useStudents = () => {
             });
 
             if (!response.ok) {
-                console.warn('API fetch failed, falling back to local dummy dataset');
+                console.warn('API fetch failed, reading from local state');
                 setStudents(getInitialStudents());
                 return;
             }
 
             const data: Student[] = await response.json();
-            if (Array.isArray(data) && data.length > 0) {
+            if (Array.isArray(data)) {
                 saveStudents(data);
-            } else {
-                // If API returns empty list, keep dummy students
-                setStudents(getInitialStudents());
             }
         } catch (err: any) {
-            console.warn('Network error, using local dummy data:', err.message);
+            console.warn('Network error, using local data:', err.message);
             setStudents(getInitialStudents());
         } finally {
             setLoading(false);
@@ -116,7 +104,7 @@ export const useStudents = () => {
             createdAt: new Date().toISOString(),
         };
 
-        if (token && !token.startsWith('demo-')) {
+        if (token) {
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
@@ -144,7 +132,7 @@ export const useStudents = () => {
     const updateStudent = async (studentData: Student): Promise<Student> => {
         const token = getToken();
 
-        if (token && !token.startsWith('demo-')) {
+        if (token) {
             try {
                 const response = await fetch(`${API_URL}/${studentData.id}`, {
                     method: 'PUT',
@@ -172,7 +160,7 @@ export const useStudents = () => {
     const deleteStudent = async (studentId: string): Promise<void> => {
         const token = getToken();
 
-        if (token && !token.startsWith('demo-')) {
+        if (token) {
             try {
                 await fetch(`${API_URL}/${studentId}`, {
                     method: 'DELETE',
@@ -188,10 +176,6 @@ export const useStudents = () => {
         saveStudents(students.filter(s => s.id !== studentId));
     };
 
-    const resetToDummyData = () => {
-        saveStudents(DUMMY_STUDENTS);
-    };
-
     return { 
         students, 
         loading, 
@@ -199,7 +183,6 @@ export const useStudents = () => {
         fetchStudents, 
         addStudent, 
         updateStudent, 
-        deleteStudent,
-        resetToDummyData
+        deleteStudent
     };
 };
