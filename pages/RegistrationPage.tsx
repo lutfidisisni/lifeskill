@@ -7,7 +7,15 @@ declare const Swal: any;
 
 const API_URL = 'https://apils.manubanyuputih.id/api/register';
 const QUOTA_API_URL = 'https://apils.manubanyuputih.id/api/quotas';
-const STORAGE_KEY = 'manusa_students_data_v1';
+const STORAGE_KEY = 'manusa_students_data_v2';
+const LEGACY_STORAGE_KEY = 'manusa_students_data_v1';
+
+const DUMMY_IDS = new Set([
+    'std-001', 'std-002', 'std-003', 'std-004', 'std-005',
+    'std-006', 'std-007', 'std-008', 'std-009', 'std-010',
+    'std-011', 'std-012', 'std-013', 'std-014', 'std-015',
+    'std-016', 'std-017', 'std-018', 'std-019', 'std-020'
+]);
 
 const SKILL_ICONS: Record<string, { icon: string; bg: string; text: string }> = {
     'Desain Grafis': { icon: 'fa-palette', bg: 'bg-indigo-100', text: 'text-indigo-600' },
@@ -22,11 +30,12 @@ const SKILL_ICONS: Record<string, { icon: string; bg: string; text: string }> = 
 const calculateLocalQuotaCounts = (): Record<string, number> => {
     let studentList: Student[] = [];
     try {
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
-                studentList = parsed;
+                studentList = parsed.filter((s: any) => s && s.id && !DUMMY_IDS.has(s.id) && s.fullName !== 'Ahmad Fauzi Ridwan');
             }
         }
     } catch (e) {

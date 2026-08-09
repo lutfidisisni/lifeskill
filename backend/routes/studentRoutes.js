@@ -4,9 +4,12 @@ const {
     getStudents,
     addStudent,
     updateStudent,
-    deleteStudent
+    deleteStudent,
+    clearAllStudents,
 } = require('../controllers/studentController');
 const { protect } = require('../middleware/authMiddleware');
+
+router.delete('/students-clear-all', protect, clearAllStudents);
 
 router.route('/students')
     .get(protect, getStudents)

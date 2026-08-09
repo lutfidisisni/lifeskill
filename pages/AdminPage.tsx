@@ -24,7 +24,7 @@ export const AdminPage: React.FC = () => {
     const [summaryClassFilter, setSummaryClassFilter] = useState<ClassLevel | '' | 'SEMUA'>('');
     const [selectedLifeSkillForAttendance, setSelectedLifeSkillForAttendance] = useState<LifeSkill | ''>('');
 
-    const { students, loading, error, addStudent, updateStudent, deleteStudent, fetchStudents } = useStudents();
+    const { students, loading, error, addStudent, updateStudent, deleteStudent, fetchStudents, clearAllStudents } = useStudents();
     const navigate = useNavigate();
 
     const handleChangePassword = async () => {
@@ -111,6 +111,30 @@ export const AdminPage: React.FC = () => {
             text: 'Data pendaftar telah dimuat ulang dari database server.',
             timer: 1500,
             showConfirmButton: false
+        });
+    };
+
+    const handleClearAllData = () => {
+        Swal.fire({
+            title: 'Kosongkan Semua Data Pendaftar?',
+            text: 'Semua data pendaftaran siswa akan dihapus dari server MySQL dan penyimpanan lokal. Tindakan ini tidak dapat dibatalkan.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Ya, Kosongkan Semua',
+            cancelButtonText: 'Batal'
+        }).then(async (result: any) => {
+            if (result.isConfirmed) {
+                await clearAllStudents();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Data Berhasil Dikosongkan',
+                    text: 'Seluruh data pendaftar telah dibersihkan.',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+            }
         });
     };
     
@@ -768,6 +792,16 @@ export const AdminPage: React.FC = () => {
                         >
                             <i className="fa-solid fa-arrows-rotate text-emerald-400"></i>
                             <span>Refresh Data Server</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleClearAllData}
+                            className="w-full bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border border-slate-700 hover:border-rose-800 transition"
+                            title="Kosongkan Semua Data Pendaftar"
+                        >
+                            <i className="fa-solid fa-trash-can text-rose-400"></i>
+                            <span>Kosongkan Semua Data</span>
                         </button>
 
                         <button

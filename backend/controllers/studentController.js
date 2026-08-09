@@ -180,6 +180,19 @@ const deleteStudent = async (req, res) => {
     }
 };
 
+// @desc    Clear all students (by Admin)
+// @route   DELETE /api/students-clear-all
+// @access  Private
+const clearAllStudents = async (req, res) => {
+    try {
+        await db.execute('DELETE FROM students');
+        res.json({ message: 'Semua data siswa berhasil dibersihkan' });
+    } catch (error) {
+        console.error('Clear all students error:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
 module.exports = {
     getQuotas,
     getStudents,
@@ -187,4 +200,6 @@ module.exports = {
     addStudent,
     updateStudent,
     deleteStudent,
+    clearAllStudents,
 };
+

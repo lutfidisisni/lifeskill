@@ -2,21 +2,41 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Student } from '../types';
 
 const API_URL = 'https://apils.manubanyuputih.id/api/students';
-const STORAGE_KEY = 'manusa_students_data_v1';
+const CLEAR_ALL_API_URL = 'https://apils.manubanyuputih.id/api/students-clear-all';
+const STORAGE_KEY = 'manusa_students_data_v2';
+const LEGACY_STORAGE_KEY = 'manusa_students_data_v1';
 
-const getInitialStudents = (): Student[] => {
+// Known dummy IDs from previous demo version
+const DUMMY_IDS = new Set([
+    'std-001', 'std-002', 'std-003', 'std-004', 'std-005',
+    'std-006', 'std-007', 'std-008', 'std-009', 'std-010',
+    'std-011', 'std-012', 'std-013', 'std-014', 'std-015',
+    'std-016', 'std-017', 'std-018', 'std-019', 'std-020'
+]);
+
+export const purgeOldDummyData = (): Student[] => {
     try {
+        // Remove legacy storage key that contained dummy records
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+        
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (Array.isArray(parsed)) {
-                return parsed;
+                // Filter out any dummy entries
+                const filtered = parsed.filter((s: any) => s && s.id && !DUMMY_IDS.has(s.id) && s.fullName !== 'Ahmad Fauzi Ridwan');
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+                return filtered;
             }
         }
     } catch (e) {
         console.error('Error reading localStorage for students:', e);
     }
     return [];
+};
+
+const getInitialStudents = (): Student[] => {
+    return purgeOldDummyData();
 };
 
 const handleApiError = async (response: Response, defaultMessage: string): Promise<Error> => {
@@ -176,6 +196,23 @@ export const useStudents = () => {
         saveStudents(students.filter(s => s.id !== studentId));
     };
 
+    const clearAllStudents = async (): Promise<void> => {
+        const token = getToken();
+        if (token) {
+            try {
+                await fetch(CLEAR_ALL_API_URL, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+            } catch (e) {
+                console.warn('Server offline, clearing locally:', e);
+            }
+        }
+        saveStudents([]);
+    };
+
     return { 
         students, 
         loading, 
@@ -183,6 +220,7 @@ export const useStudents = () => {
         fetchStudents, 
         addStudent, 
         updateStudent, 
-        deleteStudent
+        deleteStudent,
+        clearAllStudents
     };
 };
