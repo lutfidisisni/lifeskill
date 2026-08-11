@@ -188,12 +188,6 @@ export const RegistrationPage: React.FC = () => {
             setAlreadySelected(true);
             setRegistrationSuccess(updated);
 
-            // Update real-time quota
-            setQuotaCounts(prev => ({
-                ...prev,
-                [selectedProgram]: (prev[selectedProgram] || 0) + 1,
-            }));
-
             Swal.fire({
                 icon: 'success',
                 title: 'Pilihan Berhasil Disimpan!',
