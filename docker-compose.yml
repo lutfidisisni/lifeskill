@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: lifeskill-app:v1.0.0 # Ubah versi ini (misal ke v1.0.1, v1.0.2) untuk memaksa Portainer build ulang
     container_name: lifeskill_app
     restart: always
     ports:

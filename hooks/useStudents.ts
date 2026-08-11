@@ -128,7 +128,11 @@ export const useStudents = () => {
 
         // Try API lookup
         try {
-            const response = await fetch(`${LOOKUP_NIS_API_URL}/${encodeURIComponent(cleanNIS)}`);
+            const response = await fetch(LOOKUP_NIS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nis: cleanNIS })
+            });
             if (response.ok) {
                 const data = await response.json();
                 return {
