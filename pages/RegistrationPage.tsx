@@ -179,6 +179,10 @@ export const RegistrationPage: React.FC = () => {
             return;
         }
 
+        const trimmedName = fullName.trim();
+        const trimmedClass = classLevel.trim();
+        const trimmedWhatsapp = whatsappNumber.trim();
+
         if (isSkillFull(lifeSkill)) {
             Swal.fire({
                 icon: 'warning',
@@ -189,61 +193,123 @@ export const RegistrationPage: React.FC = () => {
             return;
         }
 
+        // 1. Check duplicate registration locally (same name and class)
+        let currentStudents: Student[] = [];
+        try {
+            const existingStr = localStorage.getItem(STORAGE_KEY);
+            if (existingStr) {
+                currentStudents = JSON.parse(existingStr);
+            }
+        } catch (e) {
+            console.error('Failed reading existing students:', e);
+        }
+
+        const duplicateInLocal = currentStudents.find(
+            s => s && s.fullName && s.classLevel &&
+                 s.fullName.trim().toLowerCase() === trimmedName.toLowerCase() &&
+                 s.classLevel.trim() === trimmedClass
+        );
+
+        if (duplicateInLocal) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Pendaftaran Ditolak (Data Ganda)',
+                html: `
+                    <div style="text-align: center; font-size: 14px; color: #334155;">
+                        <p style="margin-bottom: 8px;">
+                            Siswa atas nama <b>${trimmedName}</b> dari kelas <b>${trimmedClass}</b> sudah pernah terdaftar pada program <b>${duplicateInLocal.lifeSkill}</b>.
+                        </p>
+                        <p style="color: #64748b; font-size: 13px;">
+                            Setiap siswa hanya diperbolehkan mendaftar <b>1 (satu) kali</b> agar tidak terjadi data ganda.
+                        </p>
+                    </div>
+                `,
+                confirmButtonColor: '#4f46e5',
+            });
+            return;
+        }
+
         setLoading(true);
 
-        const newStudentData: Student = {
+        let registeredStudent: Student = {
             id: 'std-' + Date.now(),
-            fullName: fullName.trim(),
+            fullName: trimmedName,
             jenisKelamin,
-            classLevel,
-            whatsappNumber: whatsappNumber.trim(),
+            classLevel: trimmedClass as ClassLevel,
+            whatsappNumber: trimmedWhatsapp,
             lifeSkill,
             createdAt: new Date().toISOString(),
         };
 
         try {
-            // Save to local storage for instantaneous sync across all views
+            // 2. Submit to backend API
+            let isApiError = false;
             try {
-                const existingStr = localStorage.getItem(STORAGE_KEY);
-                const currentStudents: Student[] = existingStr ? JSON.parse(existingStr) : [];
-                const updatedList = [newStudentData, ...currentStudents];
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fullName: trimmedName,
+                        jenisKelamin,
+                        classLevel: trimmedClass,
+                        whatsappNumber: trimmedWhatsapp,
+                        lifeSkill,
+                    }),
+                });
+
+                if (!response.ok) {
+                    isApiError = true;
+                    const errData = await response.json().catch(() => ({}));
+                    const errMsg = errData.message || 'Tidak dapat menyimpan pendaftaran.';
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Pendaftaran Ditolak',
+                        html: `<p style="font-size: 14px; color: #334155;">${errMsg}</p>`,
+                        confirmButtonColor: '#d33',
+                    });
+                    setLoading(false);
+                    return;
+                }
+
+                const result = await response.json();
+                if (result && result.id) {
+                    registeredStudent = result;
+                }
+            } catch (apiErr) {
+                console.warn('Backend API unavailable, continuing with verified local registration:', apiErr);
+            }
+
+            if (isApiError) return;
+
+            // 3. Save to local storage for instantaneous synchronization
+            try {
+                const updatedList = [registeredStudent, ...currentStudents.filter(s => s.id !== registeredStudent.id)];
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
                 window.dispatchEvent(new Event('manusa_data_updated'));
             } catch (err) {
                 console.error('Failed to save to localStorage:', err);
             }
 
-            // Immediately update real-time quota state so progress bar advances instantly
-            setQuotaCounts(prev => {
-                const next = {
-                    ...prev,
-                    [lifeSkill]: (prev[lifeSkill] || 0) + 1
-                };
-                return next;
-            });
+            // 4. Update real-time quota state
+            setQuotaCounts(prev => ({
+                ...prev,
+                [lifeSkill]: (prev[lifeSkill] || 0) + 1
+            }));
             setLastUpdatedTime(new Date());
 
-            // Try posting to real backend API in parallel/background
-            try {
-                await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        fullName: newStudentData.fullName,
-                        jenisKelamin: newStudentData.jenisKelamin,
-                        classLevel: newStudentData.classLevel,
-                        whatsappNumber: newStudentData.whatsappNumber,
-                        lifeSkill: newStudentData.lifeSkill,
-                    }),
-                });
-            } catch (apiErr) {
-                console.warn('API sync warning (saved locally):', apiErr);
-            }
-            
             Swal.fire({
                 icon: 'success',
                 title: 'Pendaftaran Berhasil!',
-                text: `Terima kasih ${fullName}, data Anda untuk program "${lifeSkill}" telah berhasil tersimpan dan kuota telah diperbarui secara otomatis.`,
+                html: `
+                    <div style="text-align: center;">
+                        <p style="font-size: 15px; color: #1e293b; margin-bottom: 6px;">
+                            Terima kasih <b>${trimmedName}</b> (${trimmedClass})!
+                        </p>
+                        <p style="font-size: 13px; color: #475569;">
+                            Data Anda untuk program <b>"${lifeSkill}"</b> telah berhasil disimpan dan kuota otomatis terperbarui.
+                        </p>
+                    </div>
+                `,
                 confirmButtonColor: '#10b981',
             });
 

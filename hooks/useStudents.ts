@@ -3,6 +3,7 @@ import type { Student } from '../types';
 import { API_BASE_URL } from '../constants';
 
 const API_URL = `${API_BASE_URL}/students`;
+const BULK_DELETE_API_URL = `${API_BASE_URL}/students-bulk-delete`;
 const CLEAR_ALL_API_URL = `${API_BASE_URL}/students-clear-all`;
 const STORAGE_KEY = 'manusa_students_data_v2';
 const LEGACY_STORAGE_KEY = 'manusa_students_data_v1';
@@ -118,6 +119,17 @@ export const useStudents = () => {
     }, [fetchStudents]);
 
     const addStudent = async (studentData: Omit<Student, 'id'>): Promise<Student> => {
+        // Pre-check duplicate locally
+        const trimmedName = studentData.fullName.trim().toLowerCase();
+        const trimmedClass = studentData.classLevel.trim();
+        const isDuplicate = students.some(
+            s => s.fullName.trim().toLowerCase() === trimmedName && s.classLevel.trim() === trimmedClass
+        );
+
+        if (isDuplicate) {
+            throw new Error(`Siswa "${studentData.fullName}" dari kelas "${studentData.classLevel}" sudah terdaftar sebelumnya. Setiap siswa hanya dapat mendaftar 1 kali.`);
+        }
+
         const token = getToken();
         const fallbackNewStudent: Student = {
             ...studentData,
@@ -140,8 +152,14 @@ export const useStudents = () => {
                     const newStudent: Student = await response.json();
                     saveStudents([newStudent, ...students]);
                     return newStudent;
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.message || 'Gagal menambahkan siswa.');
                 }
-            } catch (e) {
+            } catch (e: any) {
+                if (e.message && e.message.includes('terdaftar')) {
+                    throw e;
+                }
                 console.warn('Server offline, saving locally:', e);
             }
         }
@@ -151,6 +169,17 @@ export const useStudents = () => {
     };
 
     const updateStudent = async (studentData: Student): Promise<Student> => {
+        // Pre-check duplicate with other students locally
+        const trimmedName = studentData.fullName.trim().toLowerCase();
+        const trimmedClass = studentData.classLevel.trim();
+        const isDuplicate = students.some(
+            s => s.id !== studentData.id && s.fullName.trim().toLowerCase() === trimmedName && s.classLevel.trim() === trimmedClass
+        );
+
+        if (isDuplicate) {
+            throw new Error(`Siswa "${studentData.fullName}" dari kelas "${studentData.classLevel}" sudah terdaftar pada data siswa lainnya.`);
+        }
+
         const token = getToken();
 
         if (token) {
@@ -168,8 +197,14 @@ export const useStudents = () => {
                     const updated: Student = await response.json();
                     saveStudents(students.map(s => (s.id === updated.id ? updated : s)));
                     return updated;
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.message || 'Gagal memperbarui data siswa.');
                 }
-            } catch (e) {
+            } catch (e: any) {
+                if (e.message && e.message.includes('terdaftar')) {
+                    throw e;
+                }
                 console.warn('Server offline, updating locally:', e);
             }
         }
@@ -197,6 +232,30 @@ export const useStudents = () => {
         saveStudents(students.filter(s => s.id !== studentId));
     };
 
+    const deleteBulkStudents = async (studentIds: string[]): Promise<void> => {
+        if (!studentIds || studentIds.length === 0) return;
+
+        const token = getToken();
+        const idSet = new Set(studentIds);
+
+        if (token) {
+            try {
+                await fetch(BULK_DELETE_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ ids: studentIds }),
+                });
+            } catch (e) {
+                console.warn('Server offline, bulk deleting locally:', e);
+            }
+        }
+
+        saveStudents(students.filter(s => !idSet.has(s.id)));
+    };
+
     const clearAllStudents = async (): Promise<void> => {
         const token = getToken();
         if (token) {
@@ -222,6 +281,7 @@ export const useStudents = () => {
         addStudent, 
         updateStudent, 
         deleteStudent,
+        deleteBulkStudents,
         clearAllStudents
     };
 };

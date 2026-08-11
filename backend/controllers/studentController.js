@@ -100,11 +100,29 @@ const registerStudent = async (req, res) => {
         return res.status(400).json({ message: 'Mohon lengkapi semua kolom isian.' });
     }
 
+    const cleanFullName = String(fullName).trim();
+    const cleanClassLevel = String(classLevel).trim();
+    const cleanWhatsapp = String(whatsappNumber).trim();
     const normalizedSkill = lifeSkill === 'Tata Busana' ? 'Clothing Line' : lifeSkill;
     const quotaLimit = LIFE_SKILL_QUOTAS[normalizedSkill];
 
     try {
         await ensureStudentsTable();
+
+        // 1. Check duplicate student (same name and same class level)
+        const [existing] = await db.query(
+            'SELECT * FROM students WHERE LOWER(TRIM(fullName)) = LOWER(?) AND TRIM(classLevel) = ? LIMIT 1',
+            [cleanFullName, cleanClassLevel]
+        );
+
+        if (existing.length > 0) {
+            const prev = existing[0];
+            return res.status(400).json({
+                message: `Siswa "${cleanFullName}" dari kelas "${cleanClassLevel}" sudah pernah terdaftar pada program "${prev.lifeSkill}". Setiap siswa hanya diperbolehkan mendaftar 1 (satu) kali.`
+            });
+        }
+
+        // 2. Check quota availability
         if (quotaLimit !== undefined) {
             const [countResult] = await db.query(
                 'SELECT COUNT(*) as count FROM students WHERE lifeSkill = ? OR (lifeSkill = "Tata Busana" AND ? = "Clothing Line")',
@@ -118,15 +136,16 @@ const registerStudent = async (req, res) => {
             }
         }
 
+        // 3. Insert new student
         const id = randomUUID();
         const query = 'INSERT INTO students (id, fullName, classLevel, whatsappNumber, jenisKelamin, lifeSkill) VALUES (?, ?, ?, ?, ?, ?)';
-        await db.execute(query, [id, fullName, classLevel, whatsappNumber, jenisKelamin, normalizedSkill]);
+        await db.execute(query, [id, cleanFullName, cleanClassLevel, cleanWhatsapp, jenisKelamin, normalizedSkill]);
         
         const [newStudent] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
         res.status(201).json(newStudent[0]);
     } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: error.message || 'Server Error' });
     }
 };
 
@@ -138,22 +157,39 @@ const addStudent = async (req, res) => {
     const { fullName, classLevel, whatsappNumber, lifeSkill, jenisKelamin } = req.body;
     
     if (!fullName || !classLevel || !whatsappNumber || !lifeSkill || !jenisKelamin) {
-        return res.status(400).json({ message: 'Please fill all fields' });
+        return res.status(400).json({ message: 'Mohon lengkapi semua kolom isian.' });
     }
 
+    const cleanFullName = String(fullName).trim();
+    const cleanClassLevel = String(classLevel).trim();
+    const cleanWhatsapp = String(whatsappNumber).trim();
     const normalizedSkill = lifeSkill === 'Tata Busana' ? 'Clothing Line' : lifeSkill;
     const id = randomUUID();
 
     try {
         await ensureStudentsTable();
+
+        // Check duplicate student (same name and same class level)
+        const [existing] = await db.query(
+            'SELECT * FROM students WHERE LOWER(TRIM(fullName)) = LOWER(?) AND TRIM(classLevel) = ? LIMIT 1',
+            [cleanFullName, cleanClassLevel]
+        );
+
+        if (existing.length > 0) {
+            const prev = existing[0];
+            return res.status(400).json({
+                message: `Siswa "${cleanFullName}" dari kelas "${cleanClassLevel}" sudah terdaftar sebelumnya pada program "${prev.lifeSkill}". Tidak boleh ada data ganda.`
+            });
+        }
+
         const query = 'INSERT INTO students (id, fullName, classLevel, whatsappNumber, lifeSkill, jenisKelamin) VALUES (?, ?, ?, ?, ?, ?)';
-        await db.execute(query, [id, fullName, classLevel, whatsappNumber, normalizedSkill, jenisKelamin]);
+        await db.execute(query, [id, cleanFullName, cleanClassLevel, cleanWhatsapp, normalizedSkill, jenisKelamin]);
         
         const [newStudent] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
         res.status(201).json(newStudent[0]);
     } catch (error) {
         console.error('Admin add student error:', error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: error.message || 'Server Error' });
     }
 };
 
@@ -165,25 +201,41 @@ const updateStudent = async (req, res) => {
     const { fullName, classLevel, whatsappNumber, lifeSkill, jenisKelamin } = req.body;
     
     if (!fullName || !classLevel || !whatsappNumber || !lifeSkill || !jenisKelamin) {
-        return res.status(400).json({ message: 'Please fill all fields' });
+        return res.status(400).json({ message: 'Mohon lengkapi semua kolom isian.' });
     }
 
+    const cleanFullName = String(fullName).trim();
+    const cleanClassLevel = String(classLevel).trim();
+    const cleanWhatsapp = String(whatsappNumber).trim();
     const normalizedSkill = lifeSkill === 'Tata Busana' ? 'Clothing Line' : lifeSkill;
 
     try {
         await ensureStudentsTable();
+
+        // Check duplicate with another student
+        const [existing] = await db.query(
+            'SELECT * FROM students WHERE LOWER(TRIM(fullName)) = LOWER(?) AND TRIM(classLevel) = ? AND id != ? LIMIT 1',
+            [cleanFullName, cleanClassLevel, id]
+        );
+
+        if (existing.length > 0) {
+            return res.status(400).json({
+                message: `Siswa "${cleanFullName}" dari kelas "${cleanClassLevel}" sudah terdaftar pada data siswa lainnya.`
+            });
+        }
+
         const query = 'UPDATE students SET fullName = ?, classLevel = ?, whatsappNumber = ?, lifeSkill = ?, jenisKelamin = ? WHERE id = ?';
-        const [result] = await db.execute(query, [fullName, classLevel, whatsappNumber, normalizedSkill, jenisKelamin, id]);
+        const [result] = await db.execute(query, [cleanFullName, cleanClassLevel, cleanWhatsapp, normalizedSkill, jenisKelamin, id]);
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Student not found' });
+            return res.status(404).json({ message: 'Data siswa tidak ditemukan' });
         }
         
         const [updatedStudent] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
         res.json(updatedStudent[0]);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: error.message || 'Server Error' });
     }
 };
 
@@ -197,13 +249,38 @@ const deleteStudent = async (req, res) => {
         const [result] = await db.execute('DELETE FROM students WHERE id = ?', [id]);
         
         if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Student not found' });
+            return res.status(404).json({ message: 'Data siswa tidak ditemukan' });
         }
 
-        res.json({ message: 'Student removed' });
+        res.json({ message: 'Data siswa berhasil dihapus' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: error.message || 'Server Error' });
+    }
+};
+
+// @desc    Bulk delete students (by Admin)
+// @route   POST /api/students-bulk-delete
+// @access  Private
+const bulkDeleteStudents = async (req, res) => {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'Pilih minimal satu siswa untuk dihapus.' });
+    }
+
+    try {
+        await ensureStudentsTable();
+        const placeholders = ids.map(() => '?').join(',');
+        const query = `DELETE FROM students WHERE id IN (${placeholders})`;
+        const [result] = await db.execute(query, ids);
+        
+        res.json({
+            message: `${result.affectedRows} data siswa berhasil dihapus.`,
+            deletedCount: result.affectedRows
+        });
+    } catch (error) {
+        console.error('Bulk delete students error:', error);
+        res.status(500).json({ message: error.message || 'Server Error' });
     }
 };
 
@@ -217,7 +294,7 @@ const clearAllStudents = async (req, res) => {
         res.json({ message: 'Semua data siswa berhasil dibersihkan' });
     } catch (error) {
         console.error('Clear all students error:', error);
-        res.status(500).json({ message: 'Server Error' });
+        res.status(500).json({ message: error.message || 'Server Error' });
     }
 };
 
@@ -228,6 +305,7 @@ module.exports = {
     addStudent,
     updateStudent,
     deleteStudent,
+    bulkDeleteStudents,
     clearAllStudents,
 };
 
