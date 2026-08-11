@@ -63,6 +63,7 @@ export const RegistrationPage: React.FC = () => {
     const [verifiedStudent, setVerifiedStudent] = useState<Student | null>(null);
     const [alreadySelected, setAlreadySelected] = useState<boolean>(false);
     const [selectedProgram, setSelectedProgram] = useState<LifeSkill | ''>('');
+    const [whatsappInput, setWhatsappInput] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [registrationSuccess, setRegistrationSuccess] = useState<Student | null>(null);
 
@@ -88,6 +89,7 @@ export const RegistrationPage: React.FC = () => {
             if (result.found && result.student) {
                 setVerifiedStudent(result.student);
                 setAlreadySelected(result.alreadySelected);
+                setWhatsappInput(result.student.whatsappNumber || '');
                 if (result.alreadySelected && result.student.lifeSkill) {
                     setSelectedProgram(result.student.lifeSkill);
                 }
@@ -111,6 +113,7 @@ export const RegistrationPage: React.FC = () => {
         setVerifiedStudent(null);
         setAlreadySelected(false);
         setSelectedProgram('');
+        setWhatsappInput('');
         setSearchError(null);
         setRegistrationSuccess(null);
     };
@@ -177,7 +180,8 @@ export const RegistrationPage: React.FC = () => {
         try {
             const updated = await chooseLifeSkill(
                 verifiedStudent.nis,
-                selectedProgram
+                selectedProgram,
+                whatsappInput.trim()
             );
 
             setVerifiedStudent(updated);
@@ -285,6 +289,10 @@ export const RegistrationPage: React.FC = () => {
                         <tr>
                             <td class="label">Kelas / Rombel</td>
                             <td class="value">: ${verifiedStudent.classLevel}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Nomor WhatsApp</td>
+                            <td class="value">: ${verifiedStudent.whatsappNumber || '-'}</td>
                         </tr>
                         <tr>
                             <td class="label">Program Pilihan</td>
@@ -606,6 +614,26 @@ export const RegistrationPage: React.FC = () => {
                                         </div>
                                     );
                                 })}
+                            </div>
+
+                            {/* Optional WhatsApp Confirmation Field */}
+                            <div>
+                                <label htmlFor="waInput" className="block text-xs font-bold text-slate-700 mb-1">
+                                    Nomor WhatsApp Aktif (untuk info grup & jadwal praktik)
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-emerald-600 text-sm">
+                                        <i className="fa-brands fa-whatsapp font-bold"></i>
+                                    </span>
+                                    <input
+                                        type="tel"
+                                        id="waInput"
+                                        value={whatsappInput}
+                                        onChange={(e) => setWhatsappInput(e.target.value)}
+                                        placeholder="081234567890"
+                                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-medium shadow-xs"
+                                    />
+                                </div>
                             </div>
 
                             {/* Submit Button */}
