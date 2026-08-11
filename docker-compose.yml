@@ -1,5 +1,6 @@
 services:
   lifeskill-app:
+    pull_policy: always
     build:
       context: .
       dockerfile: Dockerfile
