@@ -170,9 +170,8 @@ export const useStudents = () => {
     };
 
     // Student chooses Life Skill by NIS
-    const chooseLifeSkill = async (nis: string, lifeSkill: LifeSkill, whatsappNumber?: string): Promise<Student> => {
+    const chooseLifeSkill = async (nis: string, lifeSkill: LifeSkill): Promise<Student> => {
         const cleanNIS = nis.trim();
-        const cleanWhatsapp = whatsappNumber ? whatsappNumber.trim() : '';
 
         // Try API submission
         try {
@@ -181,8 +180,7 @@ export const useStudents = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     nis: cleanNIS,
-                    lifeSkill,
-                    whatsappNumber: cleanWhatsapp,
+                    skill: lifeSkill
                 }),
             });
 
@@ -219,7 +217,7 @@ export const useStudents = () => {
         const updatedStudent: Student = {
             ...student,
             lifeSkill,
-            whatsappNumber: cleanWhatsapp || student.whatsappNumber,
+            whatsappNumber: student.whatsappNumber,
             updatedAt: new Date().toISOString(),
         };
 

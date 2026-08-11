@@ -28,15 +28,6 @@ export interface Student {
     updatedAt?: string;
 }
 
-export interface QuotaStatus {
-    skill: LifeSkill;
-    quota: number;
-    registered: number;
-    remaining: number;
-    isFull: boolean;
-    percentage: number;
-}
-
 export interface MasterStudentImportItem {
     nis: string;
     fullName: string;

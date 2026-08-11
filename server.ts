@@ -236,21 +236,6 @@ app.post('/api/choose-skill', (req, res) => {
             return res.status(400).json({ message: 'Siswa sudah memilih' });
         }
 
-        const row = db.prepare('SELECT COUNT(*) as count FROM students WHERE lifeSkill = ?').get(skill) as any;
-        const quotas: Record<string, number> = {
-            'Desain Grafis': 35,
-            'Otomotif': 42,
-            'Tata Boga': 70,
-            'Clothing Line': 35,
-            'Setir Mobil': 63,
-            'Tata Rias': 40
-        };
-        
-        if (row && row.count >= quotas[skill]) {
-            db.exec('ROLLBACK');
-            return res.status(400).json({ message: 'Kuota penuh untuk program ini' });
-        }
-
         db.prepare('UPDATE students SET lifeSkill = ?, whatsappNumber = ? WHERE nis = ?')
           .run(skill, whatsappNumber, nis);
         

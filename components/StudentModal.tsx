@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { Student, ClassLevel, LifeSkill, Gender } from '../types';
-import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS } from '../constants';
+import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS } from '../constants';
 
 interface StudentModalProps {
     isOpen: boolean;
@@ -58,7 +58,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({ isOpen, onClose, onS
             fullName: fullName.trim(), 
             jenisKelamin: jenisKelamin as Gender, 
             classLevel: classLevel as ClassLevel, 
-            whatsappNumber: whatsappNumber.trim(), 
+            whatsappNumber: whatsappNumber, // maintain the state variable if it's used elsewhere, but not from input
             lifeSkill: (lifeSkill ? (lifeSkill as LifeSkill) : null) as any
         };
 
@@ -177,25 +177,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({ isOpen, onClose, onS
                         </div>
                     </div>
 
-                    {/* WhatsApp */}
-                    <div>
-                        <label htmlFor="modalWhatsapp" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                            Nomor WhatsApp (Opsional)
-                        </label>
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-emerald-600 text-sm">
-                                <i className="fa-brands fa-whatsapp"></i>
-                            </span>
-                            <input 
-                                type="text" 
-                                id="modalWhatsapp" 
-                                value={whatsappNumber} 
-                                onChange={(e) => setWhatsappNumber(e.target.value)} 
-                                placeholder="081234567890"
-                                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500" 
-                            />
-                        </div>
-                    </div>
+
 
                     {/* Life Skill (Can be null or set) */}
                     <div>
@@ -216,7 +198,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({ isOpen, onClose, onS
                             <option value="">-- Belum Memilih (Status Menunggu Siswa) --</option>
                             {LIFE_SKILL_OPTIONS.map(ls => (
                                 <option key={ls} value={ls}>
-                                    {ls} (Kuota: {LIFE_SKILL_QUOTAS[ls]})
+                                    {ls}
                                 </option>
                             ))}
                         </select>

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { LifeSkill, type Student, type ClassLevel } from '../types';
-import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, APP_LOGO, API_BASE_URL } from '../constants';
+import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, APP_LOGO, API_BASE_URL } from '../constants';
 import { StudentModal } from '../components/StudentModal';
 import { BulkImportModal } from '../components/BulkImportModal';
 import { useStudents } from '../hooks/useStudents';
@@ -328,13 +328,7 @@ export const AdminPage: React.FC = () => {
         let footerRow = '';
         if (includeTotal) {
             const totalPendaftar = data.reduce((sum, item) => sum + (item['Jumlah Pendaftar'] || 0), 0);
-            const hasQuota = headers.includes('Kuota');
-            if (hasQuota) {
-                const totalQuota = data.reduce((sum, item) => sum + (item['Kuota'] || 0), 0);
-                const totalSisa = data.reduce((sum, item) => sum + (item['Sisa Kuota'] || 0), 0);
-                const overallPercent = totalQuota > 0 ? ((totalPendaftar / totalQuota) * 100).toFixed(1) + '%' : '0%';
-                footerRow = `<tfoot><tr><td></td><td>Total</td><td class="center">${totalPendaftar}</td><td class="center">${totalQuota}</td><td class="center">${totalSisa}</td><td class="center">${overallPercent}</td><td></td></tr></tfoot>`;
-            } else if (headers.length > 1) {
+            if (headers.length > 1) {
                 footerRow = `<tfoot><tr><td colspan="${headers.length - 1}">Total</td><td class="center">${totalPendaftar}</td></tr></tfoot>`;
             }
         }
@@ -988,20 +982,12 @@ export const AdminPage: React.FC = () => {
 
             case 'summary': {
                 const summaryByLifeSkill = LIFE_SKILL_OPTIONS.map((ls, index) => {
-                    const count = students.filter(s => s.lifeSkill === ls || (s.lifeSkill === 'Tata Busana' && ls === LifeSkill.CLOTHING_LINE)).length;
-                    const quota = LIFE_SKILL_QUOTAS[ls];
-                    const remaining = Math.max(0, quota - count);
-                    const percentage = quota > 0 ? ((count / quota) * 100).toFixed(1) + '%' : '0%';
-                    const status = count >= quota ? 'Penuh' : 'Tersedia';
+                    const count = students.filter(s => s.lifeSkill === ls || (s.lifeSkill as string === 'Tata Busana' && ls === LifeSkill.CLOTHING_LINE)).length;
 
                     return {
                         "No.": index + 1,
                         "Life Skill": ls,
                         "Jumlah Pendaftar": count,
-                        "Kuota": quota,
-                        "Sisa Kuota": remaining,
-                        "Persentase": percentage,
-                        "Status": status,
                     };
                 });
                 const summaryByClass = CLASS_OPTIONS.map((c, index) => ({ "No.": index + 1, "Kelas": c, "Jumlah Pendaftar": students.filter(s => s.classLevel === c && s.lifeSkill).length }));
@@ -1298,11 +1284,7 @@ const SummaryTable: React.FC<{
     onDownload: () => void;
 }> = ({ title, data, onPrint, onDownload }) => {
     const headers = data.length > 0 ? Object.keys(data[0]) : [];
-    const hasQuota = headers.includes('Kuota');
     const totalPendaftar = data.reduce((sum, item) => sum + (item['Jumlah Pendaftar'] || 0), 0);
-    const totalKuota = data.reduce((sum, item) => sum + (item['Kuota'] || 0), 0);
-    const totalSisa = data.reduce((sum, item) => sum + (item['Sisa Kuota'] || 0), 0);
-    const overallPercent = totalKuota > 0 ? ((totalPendaftar / totalKuota) * 100).toFixed(1) + '%' : '0%';
 
     return (
         <div>
@@ -1352,21 +1334,10 @@ const SummaryTable: React.FC<{
                     </tbody>
                     {data.length > 0 && (
                         <tfoot className="bg-slate-100 font-bold text-slate-800">
-                            {hasQuota ? (
-                                <tr>
-                                    <td className="py-2 px-3 text-left" colSpan={2}>Total</td>
-                                    <td className="py-2 px-3 text-center">{totalPendaftar}</td>
-                                    <td className="py-2 px-3 text-center">{totalKuota}</td>
-                                    <td className="py-2 px-3 text-center">{totalSisa}</td>
-                                    <td className="py-2 px-3 text-center">{overallPercent}</td>
-                                    <td className="py-2 px-3 text-center"></td>
-                                </tr>
-                            ) : (
-                                <tr>
-                                    <td className="py-2 px-3 text-left" colSpan={headers.length - 1}>Total</td>
-                                    <td className="py-2 px-3 text-center">{totalPendaftar}</td>
-                                </tr>
-                            )}
+                            <tr>
+                                <td className="py-2 px-3 text-left" colSpan={headers.length - 1}>Total</td>
+                                <td className="py-2 px-3 text-center">{totalPendaftar}</td>
+                            </tr>
                         </tfoot>
                     )}
                 </table>
@@ -1437,11 +1408,10 @@ const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenI
 
     const dataByLifeSkill = useMemo(() => {
         return LIFE_SKILL_OPTIONS.map(skill => {
-            const count = registeredStudents.filter(s => s.lifeSkill === skill || (s.lifeSkill === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
+            const count = registeredStudents.filter(s => s.lifeSkill === skill || (s.lifeSkill as string === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
             return {
                 name: skill,
-                value: count,
-                quota: LIFE_SKILL_QUOTAS[skill]
+                value: count
             };
         });
     }, [registeredStudents]);
@@ -1523,35 +1493,21 @@ const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenI
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h3 className="text-lg font-bold text-slate-800">Status Kuota 6 Program Life Skill</h3>
-                        <p className="text-xs text-slate-500">Live monitoring kapasitas tiap kelas keterampilan</p>
+                        <h3 className="text-lg font-bold text-slate-800">Jumlah Pendaftar 6 Program Life Skill</h3>
+                        <p className="text-xs text-slate-500">Live monitoring jumlah siswa tiap kelas keterampilan</p>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                     {LIFE_SKILL_OPTIONS.map((skill) => {
-                        const count = registeredStudents.filter(s => s.lifeSkill === skill || (s.lifeSkill === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
-                        const quota = LIFE_SKILL_QUOTAS[skill];
-                        const remaining = Math.max(0, quota - count);
-                        const percentage = Math.min(100, quota > 0 ? (count / quota) * 100 : 0);
-                        const isFull = count >= quota;
+                        const count = registeredStudents.filter(s => s.lifeSkill === skill || (s.lifeSkill as string === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
 
                         return (
                             <div key={skill} className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:shadow-xs transition-all">
                                 <div className="flex justify-between items-start mb-2">
                                     <span className="font-bold text-slate-800 text-xs">{skill}</span>
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isFull ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                        {isFull ? 'PENUH' : `Sisa ${remaining}`}
-                                    </span>
-                                </div>
-                                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden mb-2">
-                                    <div 
-                                        className={`h-2 rounded-full transition-all duration-500 ${isFull ? 'bg-rose-500' : percentage > 75 ? 'bg-amber-500' : 'bg-indigo-600'}`}
-                                        style={{ width: `${percentage}%` }}
-                                    ></div>
                                 </div>
                                 <div className="flex justify-between text-[11px] text-slate-600 font-medium">
-                                    <span>{count} / {quota} Siswa</span>
-                                    <span className="font-bold text-slate-700">{percentage.toFixed(1)}%</span>
+                                    <span>{count} Siswa</span>
                                 </div>
                             </div>
                         );

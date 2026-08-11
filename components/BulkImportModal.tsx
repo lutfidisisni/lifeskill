@@ -68,36 +68,31 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 'NIS': '202411001',
                 'Nama Lengkap': 'AHMAD FAUZI RIDWAN',
                 'Jenis Kelamin': 'Laki-laki',
-                'Kelas': '11.1',
-                'Nomor WhatsApp': '081234567801'
+                'Kelas': '11.1'
             },
             {
                 'NIS': '202411002',
                 'Nama Lengkap': 'SITI NUR AISYAH',
                 'Jenis Kelamin': 'Perempuan',
-                'Kelas': '11.1',
-                'Nomor WhatsApp': '081234567802'
+                'Kelas': '11.1'
             },
             {
                 'NIS': '202411003',
                 'Nama Lengkap': 'MUHAMMAD RIZKY PRATAMA',
                 'Jenis Kelamin': 'Laki-laki',
-                'Kelas': '11.2',
-                'Nomor WhatsApp': '081234567803'
+                'Kelas': '11.2'
             },
             {
                 'NIS': '202411004',
                 'Nama Lengkap': 'ANNISA RAHMAWATI',
                 'Jenis Kelamin': 'Perempuan',
-                'Kelas': '11.2',
-                'Nomor WhatsApp': '081234567804'
+                'Kelas': '11.2'
             },
             {
                 'NIS': '202411005',
                 'Nama Lengkap': 'BUDI SANTOSO',
                 'Jenis Kelamin': 'Laki-laki',
-                'Kelas': '11.3',
-                'Nomor WhatsApp': '081234567805'
+                'Kelas': '11.3'
             }
         ];
 
@@ -110,8 +105,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
             { wch: 15 }, // NIS
             { wch: 30 }, // Nama Lengkap
             { wch: 16 }, // Jenis Kelamin
-            { wch: 10 }, // Kelas
-            { wch: 18 }, // Nomor WhatsApp
+            { wch: 10 }  // Kelas
         ];
 
         XLSX.writeFile(workbook, 'Template_Master_Data_Siswa_MANUSA.xlsx');
@@ -154,7 +148,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                     let fullName = '';
                     let genderRaw = '';
                     let classRaw = '';
-                    let waRaw = '';
 
                     for (const key of Object.keys(row)) {
                         const cleanKey = key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -168,8 +161,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                             genderRaw = val;
                         } else if (cleanKey.includes('kelas') || cleanKey.includes('class') || cleanKey === 'rombel') {
                             classRaw = val;
-                        } else if (cleanKey.includes('wa') || cleanKey.includes('hp') || cleanKey.includes('telepon') || cleanKey.includes('whatsapp') || cleanKey.includes('phone')) {
-                            waRaw = val;
                         }
                     }
 
@@ -179,7 +170,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                     if (!fullName && values[1]) fullName = String(values[1]).trim();
                     if (!genderRaw && values[2]) genderRaw = String(values[2]).trim();
                     if (!classRaw && values[3]) classRaw = String(values[3]).trim();
-                    if (!waRaw && values[4]) waRaw = String(values[4]).trim();
 
                     if (!nis) {
                         errors.push(`Baris ${rowNumber}: Kolom NIS kosong.`);
@@ -202,7 +192,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                         fullName: fullName.toUpperCase(),
                         jenisKelamin: normalizeGender(genderRaw),
                         classLevel: normalizeClass(classRaw),
-                        whatsappNumber: waRaw,
+                        whatsappNumber: null, // Removed from template, only set during choice
                         lifeSkill: null, // Reset to not chosen yet
                         createdAt: new Date().toISOString(),
                     });
@@ -407,7 +397,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                                             <th className="py-2.5 px-3">Nama Lengkap</th>
                                             <th className="py-2.5 px-3">Jenis Kelamin</th>
                                             <th className="py-2.5 px-3">Kelas</th>
-                                            <th className="py-2.5 px-3">Nomor WhatsApp</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -430,7 +419,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                                                         {std.classLevel}
                                                     </span>
                                                 </td>
-                                                <td className="py-2 px-3 text-slate-600">{std.whatsappNumber || '-'}</td>
                                             </tr>
                                         ))}
                                     </tbody>

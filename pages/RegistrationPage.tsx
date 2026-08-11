@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, APP_LOGO, API_BASE_URL } from '../constants';
+import { LIFE_SKILL_OPTIONS, APP_LOGO, API_BASE_URL } from '../constants';
 import type { LifeSkill, Student } from '../types';
 import { useStudents } from '../hooks/useStudents';
 
@@ -63,74 +63,10 @@ export const RegistrationPage: React.FC = () => {
     const [verifiedStudent, setVerifiedStudent] = useState<Student | null>(null);
     const [alreadySelected, setAlreadySelected] = useState<boolean>(false);
     const [selectedProgram, setSelectedProgram] = useState<LifeSkill | ''>('');
-    const [whatsappInput, setWhatsappInput] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [registrationSuccess, setRegistrationSuccess] = useState<Student | null>(null);
 
-    // Live Quotas State
-    const [quotaCounts, setQuotaCounts] = useState<Record<string, number>>({});
-    const [isQuotaLoading, setIsQuotaLoading] = useState(false);
     const formRef = useRef<HTMLDivElement>(null);
-
-    // Compute quotas from active master students
-    const calculateLocalQuotaCounts = useCallback((): Record<string, number> => {
-        const counts: Record<string, number> = {};
-        LIFE_SKILL_OPTIONS.forEach(opt => { counts[opt] = 0; });
-        students.forEach(std => {
-            if (std.lifeSkill && std.lifeSkill.trim() !== '') {
-                const skillName = std.lifeSkill === ('Tata Busana' as any) ? 'Clothing Line' : std.lifeSkill;
-                counts[skillName] = (counts[skillName] || 0) + 1;
-            }
-        });
-        return counts;
-    }, [students]);
-
-    const totalCapacity = (Object.values(LIFE_SKILL_QUOTAS) as number[]).reduce((acc: number, q: number) => acc + q, 0);
-    const totalRegistered = (Object.values(quotaCounts) as number[]).reduce((acc: number, c: number) => acc + c, 0);
-    const totalPercentage = Math.min(100, Math.round((totalRegistered / (totalCapacity || 1)) * 100));
-
-    const fetchQuotaStatus = useCallback(async () => {
-        setIsQuotaLoading(true);
-        try {
-            const response = await fetch(QUOTA_API_URL, { cache: 'no-store' });
-            if (response.ok) {
-                const data = await response.json();
-                if (Array.isArray(data)) {
-                    const counts: Record<string, number> = {};
-                    LIFE_SKILL_OPTIONS.forEach(opt => { counts[opt] = 0; });
-                    data.forEach((item: any) => {
-                        const skillName = item.skill === 'Tata Busana' ? 'Clothing Line' : item.skill;
-                        counts[skillName] = (counts[skillName] || 0) + (item.registered ?? item.count ?? 0);
-                    });
-                    setQuotaCounts(counts);
-                    return;
-                }
-            }
-        } catch (e) {
-            // Silently fallback to local counts
-        } finally {
-            setIsQuotaLoading(false);
-        }
-
-        setQuotaCounts(calculateLocalQuotaCounts());
-    }, [calculateLocalQuotaCounts]);
-
-    useEffect(() => {
-        fetchQuotaStatus();
-        const intervalId = setInterval(fetchQuotaStatus, 5000);
-        return () => clearInterval(intervalId);
-    }, [fetchQuotaStatus]);
-
-    const getRemainingQuota = (skill: LifeSkill) => {
-        const quota = LIFE_SKILL_QUOTAS[skill] || 0;
-        const registered = quotaCounts[skill] || 0;
-        return Math.max(0, quota - registered);
-    };
-
-    const isSkillFull = (skill: LifeSkill) => {
-        const quota = LIFE_SKILL_QUOTAS[skill] || 0;
-        return (quotaCounts[skill] || 0) >= quota;
-    };
 
     // Handle NIS Search
     const handleSearchNIS = async (nisToSearch?: string) => {
@@ -152,7 +88,6 @@ export const RegistrationPage: React.FC = () => {
             if (result.found && result.student) {
                 setVerifiedStudent(result.student);
                 setAlreadySelected(result.alreadySelected);
-                setWhatsappInput(result.student.whatsappNumber || '');
                 if (result.alreadySelected && result.student.lifeSkill) {
                     setSelectedProgram(result.student.lifeSkill);
                 }
@@ -176,24 +111,12 @@ export const RegistrationPage: React.FC = () => {
         setVerifiedStudent(null);
         setAlreadySelected(false);
         setSelectedProgram('');
-        setWhatsappInput('');
         setSearchError(null);
         setRegistrationSuccess(null);
     };
 
     const handleSelectSkillCard = (skill: LifeSkill) => {
         if (alreadySelected) return;
-
-        if (isSkillFull(skill)) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Kuota Program Penuh',
-                text: `Program "${skill}" sudah mencapai kuota maksimal (${LIFE_SKILL_QUOTAS[skill]} siswa). Silakan pilih program lain yang masih tersedia.`,
-                confirmButtonColor: '#4f46e5',
-            });
-            return;
-        }
-
         setSelectedProgram(skill);
     };
 
@@ -216,16 +139,6 @@ export const RegistrationPage: React.FC = () => {
                 icon: 'warning',
                 title: 'Belum Memilih Program',
                 text: 'Silakan klik salah satu kartu program Life Skill di bawah untuk memilih.',
-                confirmButtonColor: '#4f46e5',
-            });
-            return;
-        }
-
-        if (isSkillFull(selectedProgram)) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Kuota Penuh',
-                text: `Program "${selectedProgram}" saat ini sudah penuh. Silakan tentukan pilihan lain.`,
                 confirmButtonColor: '#4f46e5',
             });
             return;
@@ -264,8 +177,7 @@ export const RegistrationPage: React.FC = () => {
         try {
             const updated = await chooseLifeSkill(
                 verifiedStudent.nis,
-                selectedProgram,
-                whatsappInput.trim()
+                selectedProgram
             );
 
             setVerifiedStudent(updated);
@@ -467,130 +379,6 @@ export const RegistrationPage: React.FC = () => {
                     </p>
                 </div>
 
-                {/* Quota Progress Section */}
-                <div className="p-4 sm:p-6 bg-slate-50/90 border-b border-slate-200">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3 sm:mb-4">
-                        <div>
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                                <span className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-indigo-100 text-indigo-700 text-xs sm:text-sm shrink-0">
-                                    <i className="fa-solid fa-chart-pie"></i>
-                                </span>
-                                <h2 className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight uppercase">
-                                    Status Kuota Program Life Skill
-                                </h2>
-                                <span className="relative flex h-2 w-2 ml-1" title="Real-time live sync aktif">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                                </span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 mt-0.5 ml-7.5 sm:ml-9">
-                                Kuota berkurang secara otomatis ketika siswa mengonfirmasi pilihannya.
-                            </p>
-                        </div>
-
-                        {/* Overall Capacity Pill */}
-                        <div className="flex items-center justify-between sm:justify-end gap-2.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
-                            <div className="text-left sm:text-right">
-                                <div className="text-[10px] text-slate-500 font-medium leading-none">Total Terisi</div>
-                                <div className="text-xs font-bold text-indigo-700 mt-0.5">
-                                    {totalRegistered} <span className="text-slate-400 font-normal">/ {totalCapacity} Siswa</span>
-                                </div>
-                            </div>
-                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center font-extrabold text-[11px] text-indigo-600 shrink-0">
-                                {totalPercentage}%
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Overall Progress Bar */}
-                    <div className="w-full bg-slate-200/80 rounded-full h-2 sm:h-2.5 mb-3 sm:mb-4 overflow-hidden shadow-inner">
-                        <div
-                            className="bg-gradient-to-r from-indigo-600 to-indigo-500 h-full rounded-full transition-all duration-700 ease-out"
-                            style={{ width: `${totalPercentage}%` }}
-                        ></div>
-                    </div>
-
-                    {/* 6 Life Skill Progress Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
-                        {LIFE_SKILL_OPTIONS.map((skill) => {
-                            const quota = LIFE_SKILL_QUOTAS[skill];
-                            const registered = quotaCounts[skill] || 0;
-                            const remaining = getRemainingQuota(skill);
-                            const isFull = isSkillFull(skill);
-                            const percent = Math.min(100, Math.round((registered / (quota || 1)) * 100));
-                            const skillMeta = SKILL_ICONS[skill] || { icon: 'fa-star', bg: 'bg-indigo-100', text: 'text-indigo-600' };
-
-                            let barColor = 'bg-indigo-600';
-                            let badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                            let statusText = `Sisa ${remaining}`;
-
-                            if (isFull) {
-                                barColor = 'bg-rose-500';
-                                badgeClass = 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse';
-                                statusText = 'PENUH';
-                            } else if (percent >= 75) {
-                                barColor = 'bg-amber-500';
-                                badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
-                                statusText = `Sisa ${remaining}`;
-                            }
-
-                            const isSelected = selectedProgram === skill;
-
-                            return (
-                                <button
-                                    type="button"
-                                    key={skill}
-                                    onClick={() => handleSelectSkillCard(skill)}
-                                    disabled={alreadySelected}
-                                    className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all duration-200 relative flex flex-col justify-between select-none touch-manipulation min-h-[92px] ${
-                                        isFull
-                                            ? 'bg-rose-50/30 border-rose-200 opacity-90 cursor-not-allowed'
-                                            : isSelected
-                                            ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-400/40 shadow-xs cursor-pointer'
-                                            : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs cursor-pointer'
-                                    }`}
-                                >
-                                    <div className="w-full">
-                                        <div className="flex items-center justify-between gap-1 mb-1.5">
-                                            <div className="flex items-center gap-1.5 min-w-0">
-                                                <span className={`w-5 h-5 rounded-md ${skillMeta.bg} ${skillMeta.text} flex items-center justify-center text-[10px] shrink-0`}>
-                                                    <i className={`fa-solid ${skillMeta.icon}`}></i>
-                                                </span>
-                                                <div className="font-bold text-[11px] sm:text-xs text-slate-800 truncate" title={skill}>
-                                                    {skill}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
-                                            <span>
-                                                Terisi: <strong className="text-slate-800">{registered}</strong>/{quota}
-                                            </span>
-                                            <span className={`px-1.5 py-0.5 rounded-full border text-[9px] font-bold ${badgeClass}`}>
-                                                {statusText}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Mini Progress Bar */}
-                                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200/60 mt-1">
-                                        <div
-                                            className={`h-full rounded-full transition-all duration-500 ease-out ${barColor}`}
-                                            style={{ width: `${percent}%` }}
-                                        ></div>
-                                    </div>
-
-                                    {isSelected && !isFull && (
-                                        <div className="mt-1 text-[9px] font-bold text-indigo-600 flex items-center gap-1">
-                                            <i className="fa-solid fa-circle-check text-emerald-500"></i> Terpilih
-                                        </div>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-
                 {/* Main Interactive Flow Area */}
                 <div ref={formRef} className="p-4 sm:p-8 space-y-6">
                     {/* STEP 1: NIS INPUT & LOOKUP */}
@@ -640,7 +428,7 @@ export const RegistrationPage: React.FC = () => {
                                         }
                                     }}
                                     disabled={Boolean(verifiedStudent)}
-                                    placeholder="Masukkan NIS Anda (contoh: 202411001)"
+                                    placeholder="Masukkan NIS Anda (contoh: 6123)"
                                     className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm font-semibold tracking-wide disabled:bg-slate-100 disabled:text-slate-500 shadow-xs"
                                 />
                             </div>
@@ -782,10 +570,6 @@ export const RegistrationPage: React.FC = () => {
                             {/* 6 Program Visual Cards */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {LIFE_SKILL_OPTIONS.map((skill) => {
-                                    const quota = LIFE_SKILL_QUOTAS[skill];
-                                    const registered = quotaCounts[skill] || 0;
-                                    const remaining = getRemainingQuota(skill);
-                                    const isFull = isSkillFull(skill);
                                     const isSelected = selectedProgram === skill;
                                     const meta = SKILL_ICONS[skill] || { icon: 'fa-star', bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200', desc: '' };
 
@@ -794,9 +578,7 @@ export const RegistrationPage: React.FC = () => {
                                             key={skill}
                                             onClick={() => handleSelectSkillCard(skill)}
                                             className={`p-4 rounded-2xl border-2 transition-all relative flex flex-col justify-between cursor-pointer select-none ${
-                                                isFull
-                                                    ? 'bg-rose-50/30 border-rose-200 opacity-80 cursor-not-allowed'
-                                                    : isSelected
+                                                isSelected
                                                     ? 'bg-indigo-50/70 border-indigo-600 shadow-md ring-2 ring-indigo-400/30 scale-[1.02]'
                                                     : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs'
                                             }`}
@@ -806,15 +588,6 @@ export const RegistrationPage: React.FC = () => {
                                                     <span className={`w-9 h-9 rounded-xl ${meta.bg} ${meta.text} flex items-center justify-center text-base shadow-xs`}>
                                                         <i className={`fa-solid ${meta.icon}`}></i>
                                                     </span>
-                                                    {isFull ? (
-                                                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-extrabold border border-rose-200">
-                                                            KUOTA PENUH
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200">
-                                                            Sisa {remaining} Kursi
-                                                        </span>
-                                                    )}
                                                 </div>
 
                                                 <h4 className="font-extrabold text-sm text-slate-800">
@@ -825,10 +598,7 @@ export const RegistrationPage: React.FC = () => {
                                                 </p>
                                             </div>
 
-                                            <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                                                <div className="text-[11px] text-slate-500 font-medium">
-                                                    Terisi: <strong>{registered}</strong> / {quota}
-                                                </div>
+                                            <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-end">
                                                 <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-xs ${
                                                     isSelected 
                                                         ? 'bg-indigo-600 border-indigo-600 text-white' 
@@ -842,30 +612,10 @@ export const RegistrationPage: React.FC = () => {
                                 })}
                             </div>
 
-                            {/* Optional WhatsApp Confirmation Field */}
-                            <div>
-                                <label htmlFor="waInput" className="block text-xs font-bold text-slate-700 mb-1">
-                                    Nomor WhatsApp Aktif (untuk info grup & jadwal praktik)
-                                </label>
-                                <div className="relative">
-                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-emerald-600 text-sm">
-                                        <i className="fa-brands fa-whatsapp font-bold"></i>
-                                    </span>
-                                    <input
-                                        type="tel"
-                                        id="waInput"
-                                        value={whatsappInput}
-                                        onChange={(e) => setWhatsappInput(e.target.value)}
-                                        placeholder="081234567890"
-                                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-medium shadow-xs"
-                                    />
-                                </div>
-                            </div>
-
                             {/* Submit Button */}
                             <button
                                 type="submit"
-                                disabled={isSubmitting || !selectedProgram || (selectedProgram ? isSkillFull(selectedProgram) : false)}
+                                disabled={isSubmitting || !selectedProgram}
                                 className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white font-extrabold py-3.5 px-4 rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 text-base active:scale-98 touch-manipulation min-h-[52px]"
                             >
                                 {isSubmitting ? (
