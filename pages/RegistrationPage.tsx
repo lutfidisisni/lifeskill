@@ -370,7 +370,7 @@ export const RegistrationPage: React.FC = () => {
                         referrerPolicy="no-referrer"
                     />
                     <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-tight">
-                        Pemilihan Program Life Skill
+                        Pendaftaran Program Life Skill
                     </h1>
                     <p className="text-indigo-100 mt-1 text-xs sm:text-sm font-medium max-w-lg">
                         Masukkan NIS Anda untuk memverifikasi data dan menentukan pilihan program Life Skill. Setiap siswa hanya dapat memilih 1 kali.
