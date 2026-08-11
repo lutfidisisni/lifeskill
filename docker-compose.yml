@@ -1,7 +1,6 @@
 services:
   lifeskill-app:
     image: lifeskill-app:latest
-    pull_policy: always
     build:
       context: .
       dockerfile: Dockerfile
