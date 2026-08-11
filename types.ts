@@ -18,6 +18,7 @@ export type Gender = 'Laki-laki' | 'Perempuan';
 
 export interface Student {
     id: string;
+    nis: string;
     fullName: string;
     classLevel: ClassLevel;
     whatsappNumber: string;
@@ -34,4 +35,12 @@ export interface QuotaStatus {
     remaining: number;
     isFull: boolean;
     percentage: number;
+}
+
+export interface MasterStudentImportItem {
+    nis: string;
+    fullName: string;
+    classLevel: string;
+    jenisKelamin: string;
+    whatsappNumber?: string;
 }

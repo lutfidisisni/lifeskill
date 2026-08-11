@@ -1,68 +1,89 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, CLASS_OPTIONS, APP_LOGO, API_BASE_URL } from '../constants';
-import type { LifeSkill, ClassLevel, Gender, Student } from '../types';
+import { LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, APP_LOGO, API_BASE_URL } from '../constants';
+import type { LifeSkill, Student } from '../types';
+import { useStudents } from '../hooks/useStudents';
 
 declare const Swal: any;
 
-const API_URL = `${API_BASE_URL}/register`;
 const QUOTA_API_URL = `${API_BASE_URL}/quotas`;
-const STORAGE_KEY = 'manusa_students_data_v2';
-const LEGACY_STORAGE_KEY = 'manusa_students_data_v1';
 
-const DUMMY_IDS = new Set([
-    'std-001', 'std-002', 'std-003', 'std-004', 'std-005',
-    'std-006', 'std-007', 'std-008', 'std-009', 'std-010',
-    'std-011', 'std-012', 'std-013', 'std-014', 'std-015',
-    'std-016', 'std-017', 'std-018', 'std-019', 'std-020'
-]);
-
-const SKILL_ICONS: Record<string, { icon: string; bg: string; text: string }> = {
-    'Desain Grafis': { icon: 'fa-palette', bg: 'bg-indigo-100', text: 'text-indigo-600' },
-    'Otomotif': { icon: 'fa-wrench', bg: 'bg-blue-100', text: 'text-blue-600' },
-    'Tata Boga': { icon: 'fa-utensils', bg: 'bg-amber-100', text: 'text-amber-600' },
-    'Clothing Line': { icon: 'fa-shirt', bg: 'bg-purple-100', text: 'text-purple-600' },
-    'Setir Mobil': { icon: 'fa-car', bg: 'bg-emerald-100', text: 'text-emerald-600' },
-    'Tata Rias': { icon: 'fa-wand-magic-sparkles', bg: 'bg-rose-100', text: 'text-rose-600' },
-};
-
-// Calculate quota counts from local student list
-const calculateLocalQuotaCounts = (): Record<string, number> => {
-    let studentList: Student[] = [];
-    try {
-        localStorage.removeItem(LEGACY_STORAGE_KEY);
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed)) {
-                studentList = parsed.filter((s: any) => s && s.id && !DUMMY_IDS.has(s.id) && s.fullName !== 'Ahmad Fauzi Ridwan');
-            }
-        }
-    } catch (e) {
-        console.error('Failed to parse local storage for quotas:', e);
-    }
-
-    const counts: Record<string, number> = {};
-    studentList.forEach(std => {
-        const skill = std.lifeSkill === ('Tata Busana' as any) ? 'Clothing Line' : std.lifeSkill;
-        if (skill) {
-            counts[skill] = (counts[skill] || 0) + 1;
-        }
-    });
-    return counts;
+const SKILL_ICONS: Record<string, { icon: string; bg: string; text: string; border: string; desc: string }> = {
+    'Desain Grafis': {
+        icon: 'fa-palette',
+        bg: 'bg-indigo-50',
+        text: 'text-indigo-600',
+        border: 'border-indigo-200',
+        desc: 'Desain visual, editing foto & video, pembuatan konten kreatif digital'
+    },
+    'Otomotif': {
+        icon: 'fa-wrench',
+        bg: 'bg-blue-50',
+        text: 'text-blue-600',
+        border: 'border-blue-200',
+        desc: 'Perawatan mesin motor, kelistrikan kendaraan & servis berkala'
+    },
+    'Tata Boga': {
+        icon: 'fa-utensils',
+        bg: 'bg-amber-50',
+        text: 'text-amber-600',
+        border: 'border-amber-200',
+        desc: 'Pengolahan makanan, bakery, pastry & kewirausahaan kuliner modern'
+    },
+    'Clothing Line': {
+        icon: 'fa-shirt',
+        bg: 'bg-purple-50',
+        text: 'text-purple-600',
+        border: 'border-purple-200',
+        desc: 'Pola busana, teknik menjahit, sablon kaos & produksi apparel distro'
+    },
+    'Setir Mobil': {
+        icon: 'fa-car',
+        bg: 'bg-emerald-50',
+        text: 'text-emerald-600',
+        border: 'border-emerald-200',
+        desc: 'Praktik mengemudi mobil aman, rambu lalu lintas & pemeliharaan armada'
+    },
+    'Tata Rias': {
+        icon: 'fa-wand-magic-sparkles',
+        bg: 'bg-rose-50',
+        text: 'text-rose-600',
+        border: 'border-rose-200',
+        desc: 'Rias wajah natural/pengantin, hair styling & perawatan kecantikan'
+    },
 };
 
 export const RegistrationPage: React.FC = () => {
-    const [fullName, setFullName] = useState('');
-    const [jenisKelamin, setJenisKelamin] = useState<Gender | ''>('');
-    const [classLevel, setClassLevel] = useState<ClassLevel | ''>('');
-    const [whatsappNumber, setWhatsappNumber] = useState('');
-    const [lifeSkill, setLifeSkill] = useState<LifeSkill | ''>('');
-    const [loading, setLoading] = useState(false);
-    const [quotaCounts, setQuotaCounts] = useState<Record<string, number>>(calculateLocalQuotaCounts);
+    const { lookupStudentByNIS, chooseLifeSkill, students } = useStudents();
+
+    // Verification & Selection State
+    const [inputNis, setInputNis] = useState('');
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
+    const [verifiedStudent, setVerifiedStudent] = useState<Student | null>(null);
+    const [alreadySelected, setAlreadySelected] = useState<boolean>(false);
+    const [selectedProgram, setSelectedProgram] = useState<LifeSkill | ''>('');
+    const [whatsappInput, setWhatsappInput] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [registrationSuccess, setRegistrationSuccess] = useState<Student | null>(null);
+
+    // Live Quotas State
+    const [quotaCounts, setQuotaCounts] = useState<Record<string, number>>({});
     const [isQuotaLoading, setIsQuotaLoading] = useState(false);
-    const [lastUpdatedTime, setLastUpdatedTime] = useState<Date>(new Date());
-    const formRef = useRef<HTMLFormElement>(null);
+    const formRef = useRef<HTMLDivElement>(null);
+
+    // Compute quotas from active master students
+    const calculateLocalQuotaCounts = useCallback((): Record<string, number> => {
+        const counts: Record<string, number> = {};
+        LIFE_SKILL_OPTIONS.forEach(opt => { counts[opt] = 0; });
+        students.forEach(std => {
+            if (std.lifeSkill && std.lifeSkill.trim() !== '') {
+                const skillName = std.lifeSkill === ('Tata Busana' as any) ? 'Clothing Line' : std.lifeSkill;
+                counts[skillName] = (counts[skillName] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [students]);
 
     const totalCapacity = (Object.values(LIFE_SKILL_QUOTAS) as number[]).reduce((acc: number, q: number) => acc + q, 0);
     const totalRegistered = (Object.values(quotaCounts) as number[]).reduce((acc: number, c: number) => acc + c, 0);
@@ -76,66 +97,29 @@ export const RegistrationPage: React.FC = () => {
                 const data = await response.json();
                 if (Array.isArray(data)) {
                     const counts: Record<string, number> = {};
+                    LIFE_SKILL_OPTIONS.forEach(opt => { counts[opt] = 0; });
                     data.forEach((item: any) => {
                         const skillName = item.skill === 'Tata Busana' ? 'Clothing Line' : item.skill;
                         counts[skillName] = (counts[skillName] || 0) + (item.registered ?? item.count ?? 0);
                     });
                     setQuotaCounts(counts);
-                    setLastUpdatedTime(new Date());
                     return;
                 }
             }
         } catch (e) {
-            // Silently fallback to storage-based counts
+            // Silently fallback to local counts
         } finally {
             setIsQuotaLoading(false);
         }
 
-        // Fallback: sync from local storage
-        const localCounts = calculateLocalQuotaCounts();
-        setQuotaCounts(localCounts);
-        setLastUpdatedTime(new Date());
-    }, []);
+        setQuotaCounts(calculateLocalQuotaCounts());
+    }, [calculateLocalQuotaCounts]);
 
     useEffect(() => {
         fetchQuotaStatus();
-
-        // 1. Listen for storage changes across tabs
-        const handleStorageChange = (e: StorageEvent) => {
-            if (e.key === STORAGE_KEY) {
-                setQuotaCounts(calculateLocalQuotaCounts());
-                setLastUpdatedTime(new Date());
-            }
-        };
-
-        // 2. Custom in-app event for instant updates within same page/tab
-        const handleCustomUpdate = () => {
-            setQuotaCounts(calculateLocalQuotaCounts());
-            setLastUpdatedTime(new Date());
-        };
-
-        window.addEventListener('storage', handleStorageChange);
-        window.addEventListener('manusa_data_updated', handleCustomUpdate);
-
-        // 3. Periodic real-time poll every 4 seconds to catch background registrations
-        const intervalId = setInterval(() => {
-            fetchQuotaStatus();
-        }, 4000);
-
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-            window.removeEventListener('manusa_data_updated', handleCustomUpdate);
-            clearInterval(intervalId);
-        };
+        const intervalId = setInterval(fetchQuotaStatus, 5000);
+        return () => clearInterval(intervalId);
     }, [fetchQuotaStatus]);
-
-    const resetForm = () => {
-        setFullName('');
-        setJenisKelamin('');
-        setClassLevel('');
-        setWhatsappNumber('');
-        setLifeSkill('');
-    };
 
     const getRemainingQuota = (skill: LifeSkill) => {
         const quota = LIFE_SKILL_QUOTAS[skill] || 0;
@@ -148,212 +132,323 @@ export const RegistrationPage: React.FC = () => {
         return (quotaCounts[skill] || 0) >= quota;
     };
 
-    const handleSelectSkillCard = (skill: LifeSkill) => {
-        if (isSkillFull(skill)) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Kuota Penuh',
-                text: `Program ${skill} sudah penuh (${LIFE_SKILL_QUOTAS[skill]} siswa). Silakan pilih program lainnya.`,
-                confirmButtonColor: '#4f46e5',
-            });
+    // Handle NIS Search
+    const handleSearchNIS = async (nisToSearch?: string) => {
+        const nis = (nisToSearch || inputNis).trim();
+        if (!nis) {
+            setSearchError('Silakan masukkan NIS Anda terlebih dahulu.');
             return;
         }
 
-        setLifeSkill(skill);
+        setIsSearching(true);
+        setSearchError(null);
+        setVerifiedStudent(null);
+        setAlreadySelected(false);
+        setSelectedProgram('');
+        setRegistrationSuccess(null);
 
-        // Smooth scroll to form on mobile
-        if (formRef.current) {
-            formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        try {
+            const result = await lookupStudentByNIS(nis);
+            if (result.found && result.student) {
+                setVerifiedStudent(result.student);
+                setAlreadySelected(result.alreadySelected);
+                setWhatsappInput(result.student.whatsappNumber || '');
+                if (result.alreadySelected && result.student.lifeSkill) {
+                    setSelectedProgram(result.student.lifeSkill);
+                }
+
+                // Smooth scroll to verified card
+                setTimeout(() => {
+                    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            } else {
+                setSearchError(result.message || `NIS "${nis}" tidak ditemukan dalam Master Data Siswa.`);
+            }
+        } catch (err: any) {
+            setSearchError(err.message || 'Gagal mencari data siswa.');
+        } finally {
+            setIsSearching(false);
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!fullName || !jenisKelamin || !classLevel || !whatsappNumber || !lifeSkill) {
+    const handleResetSearch = () => {
+        setInputNis('');
+        setVerifiedStudent(null);
+        setAlreadySelected(false);
+        setSelectedProgram('');
+        setWhatsappInput('');
+        setSearchError(null);
+        setRegistrationSuccess(null);
+    };
+
+    const handleSelectSkillCard = (skill: LifeSkill) => {
+        if (alreadySelected) return;
+
+        if (isSkillFull(skill)) {
             Swal.fire({
-                icon: 'error',
-                title: 'Data Belum Lengkap',
-                text: 'Mohon pastikan semua kolom telah diisi dengan benar.',
+                icon: 'warning',
+                title: 'Kuota Program Penuh',
+                text: `Program "${skill}" sudah mencapai kuota maksimal (${LIFE_SKILL_QUOTAS[skill]} siswa). Silakan pilih program lain yang masih tersedia.`,
                 confirmButtonColor: '#4f46e5',
             });
             return;
         }
 
-        const trimmedName = fullName.trim();
-        const trimmedClass = classLevel.trim();
-        const trimmedWhatsapp = whatsappNumber.trim();
+        setSelectedProgram(skill);
+    };
 
-        if (isSkillFull(lifeSkill)) {
+    const handleSubmitChoice = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!verifiedStudent) return;
+
+        if (alreadySelected) {
+            Swal.fire({
+                icon: 'info',
+                title: 'Sudah Memilih',
+                text: `Siswa "${verifiedStudent.fullName}" sudah terdaftar pada program "${verifiedStudent.lifeSkill}". Pilihan tidak dapat diubah kembali.`,
+                confirmButtonColor: '#4f46e5',
+            });
+            return;
+        }
+
+        if (!selectedProgram) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Belum Memilih Program',
+                text: 'Silakan klik salah satu kartu program Life Skill di bawah untuk memilih.',
+                confirmButtonColor: '#4f46e5',
+            });
+            return;
+        }
+
+        if (isSkillFull(selectedProgram)) {
             Swal.fire({
                 icon: 'warning',
                 title: 'Kuota Penuh',
-                text: `Mohon maaf, kuota untuk program Life Skill "${lifeSkill}" sudah terpenuhi (${LIFE_SKILL_QUOTAS[lifeSkill]} kuota). Silakan pilih program Life Skill lain yang masih tersedia.`,
+                text: `Program "${selectedProgram}" saat ini sudah penuh. Silakan tentukan pilihan lain.`,
                 confirmButtonColor: '#4f46e5',
             });
             return;
         }
 
-        // 1. Check duplicate registration locally (same name and class)
-        let currentStudents: Student[] = [];
-        try {
-            const existingStr = localStorage.getItem(STORAGE_KEY);
-            if (existingStr) {
-                currentStudents = JSON.parse(existingStr);
-            }
-        } catch (e) {
-            console.error('Failed reading existing students:', e);
-        }
-
-        const duplicateInLocal = currentStudents.find(
-            s => s && s.fullName && s.classLevel &&
-                 s.fullName.trim().toLowerCase() === trimmedName.toLowerCase() &&
-                 s.classLevel.trim() === trimmedClass
-        );
-
-        if (duplicateInLocal) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Pendaftaran Ditolak (Data Ganda)',
-                html: `
-                    <div style="text-align: center; font-size: 14px; color: #334155;">
-                        <p style="margin-bottom: 8px;">
-                            Siswa atas nama <b>${trimmedName}</b> dari kelas <b>${trimmedClass}</b> sudah pernah terdaftar pada program <b>${duplicateInLocal.lifeSkill}</b>.
-                        </p>
-                        <p style="color: #64748b; font-size: 13px;">
-                            Setiap siswa hanya diperbolehkan mendaftar <b>1 (satu) kali</b> agar tidak terjadi data ganda.
-                        </p>
+        // Confirmation Dialog
+        const { isConfirmed } = await Swal.fire({
+            title: 'Konfirmasi Pilihan Life Skill',
+            html: `
+                <div style="text-align: left; font-size: 14px; color: #334155; line-height: 1.6;">
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px;">
+                        <p style="margin: 0; font-size: 12px; color: #64748b;">Nama Siswa:</p>
+                        <p style="margin: 0 0 6px 0; font-weight: 700; color: #0f172a; font-size: 15px;">${verifiedStudent.fullName}</p>
+                        <p style="margin: 0; font-size: 12px; color: #64748b;">NIS / Kelas:</p>
+                        <p style="margin: 0; font-weight: 600; color: #334155;">${verifiedStudent.nis} / Kelas ${verifiedStudent.classLevel}</p>
                     </div>
-                `,
-                confirmButtonColor: '#4f46e5',
-            });
-            return;
-        }
+                    <p style="margin-bottom: 8px;">
+                        Program yang Anda pilih: <br/>
+                        <strong style="color: #4f46e5; font-size: 16px;">✨ ${selectedProgram}</strong>
+                    </p>
+                    <p style="font-size: 12px; color: #ef4444; font-weight: 600; margin: 0;">
+                        ⚠️ Perhatian: Setiap siswa hanya dapat memilih 1 (satu) kali dan pilihan tidak dapat diganti secara mandiri.
+                    </p>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Ya, Simpan Pilihan Saya',
+            cancelButtonText: 'Periksa Kembali',
+            confirmButtonColor: '#4f46e5',
+            cancelButtonColor: '#64748b',
+        });
 
-        setLoading(true);
+        if (!isConfirmed) return;
 
-        let registeredStudent: Student = {
-            id: 'std-' + Date.now(),
-            fullName: trimmedName,
-            jenisKelamin,
-            classLevel: trimmedClass as ClassLevel,
-            whatsappNumber: trimmedWhatsapp,
-            lifeSkill,
-            createdAt: new Date().toISOString(),
-        };
-
+        setIsSubmitting(true);
         try {
-            // 2. Submit to backend API
-            let isApiError = false;
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        fullName: trimmedName,
-                        jenisKelamin,
-                        classLevel: trimmedClass,
-                        whatsappNumber: trimmedWhatsapp,
-                        lifeSkill,
-                    }),
-                });
+            const updated = await chooseLifeSkill(
+                verifiedStudent.nis,
+                selectedProgram,
+                whatsappInput.trim()
+            );
 
-                if (!response.ok) {
-                    isApiError = true;
-                    const errData = await response.json().catch(() => ({}));
-                    const errMsg = errData.message || 'Tidak dapat menyimpan pendaftaran.';
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Pendaftaran Ditolak',
-                        html: `<p style="font-size: 14px; color: #334155;">${errMsg}</p>`,
-                        confirmButtonColor: '#d33',
-                    });
-                    setLoading(false);
-                    return;
-                }
+            setVerifiedStudent(updated);
+            setAlreadySelected(true);
+            setRegistrationSuccess(updated);
 
-                const result = await response.json();
-                if (result && result.id) {
-                    registeredStudent = result;
-                }
-            } catch (apiErr) {
-                console.warn('Backend API unavailable, continuing with verified local registration:', apiErr);
-            }
-
-            if (isApiError) return;
-
-            // 3. Save to local storage for instantaneous synchronization
-            try {
-                const updatedList = [registeredStudent, ...currentStudents.filter(s => s.id !== registeredStudent.id)];
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
-                window.dispatchEvent(new Event('manusa_data_updated'));
-            } catch (err) {
-                console.error('Failed to save to localStorage:', err);
-            }
-
-            // 4. Update real-time quota state
+            // Update real-time quota
             setQuotaCounts(prev => ({
                 ...prev,
-                [lifeSkill]: (prev[lifeSkill] || 0) + 1
+                [selectedProgram]: (prev[selectedProgram] || 0) + 1,
             }));
-            setLastUpdatedTime(new Date());
 
             Swal.fire({
                 icon: 'success',
-                title: 'Pendaftaran Berhasil!',
+                title: 'Pilihan Berhasil Disimpan!',
                 html: `
-                    <div style="text-align: center;">
-                        <p style="font-size: 15px; color: #1e293b; margin-bottom: 6px;">
-                            Terima kasih <b>${trimmedName}</b> (${trimmedClass})!
+                    <div style="text-align: center; font-size: 14px; color: #334155;">
+                        <p style="font-size: 15px; margin-bottom: 6px;">
+                            Selamat <b>${updated.fullName}</b>!
                         </p>
-                        <p style="font-size: 13px; color: #475569;">
-                            Data Anda untuk program <b>"${lifeSkill}"</b> telah berhasil disimpan dan kuota otomatis terperbarui.
+                        <p style="color: #475569; margin-bottom: 12px;">
+                            Pilihan program Life Skill <b>"${updated.lifeSkill}"</b> telah berhasil dicatat oleh sistem.
                         </p>
+                        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 600;">
+                            ✅ Terdaftar Resmi untuk Kelas ${updated.classLevel}
+                        </div>
                     </div>
                 `,
                 confirmButtonColor: '#10b981',
             });
-
-            resetForm();
-
-        } catch (error: any) {
+        } catch (err: any) {
             Swal.fire({
                 icon: 'error',
                 title: 'Pendaftaran Gagal',
-                text: error.message || 'Tidak dapat menyimpan pendaftaran. Silakan coba lagi.',
-                confirmButtonColor: '#d33',
+                text: err.message || 'Terjadi kendala saat menyimpan pilihan. Silakan coba kembali.',
+                confirmButtonColor: '#ef4444',
             });
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
-    
+
+    const handlePrintReceipt = () => {
+        if (!verifiedStudent || !verifiedStudent.lifeSkill) return;
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Bukti Pendaftaran Life Skill - ${verifiedStudent.fullName}</title>
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+                <style>
+                    body { font-family: 'Plus Jakarta Sans', sans-serif; padding: 30px; color: #0f172a; max-width: 650px; margin: 0 auto; }
+                    .header { display: flex; align-items: center; gap: 16px; border-bottom: 3px double #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
+                    .header img { width: 70px; height: 70px; object-fit: contain; }
+                    .header-text h2 { margin: 0; font-size: 18px; font-weight: 800; }
+                    .header-text h3 { margin: 2px 0 0 0; font-size: 15px; font-weight: 700; color: #334155; }
+                    .header-text p { margin: 2px 0 0 0; font-size: 11px; color: #64748b; }
+                    .title { text-align: center; font-size: 16px; font-weight: 800; text-transform: uppercase; margin-bottom: 16px; letter-spacing: 0.5px; }
+                    .card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin-bottom: 20px; background-color: #f8fafc; }
+                    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+                    td { padding: 6px 4px; vertical-align: top; }
+                    td.label { width: 35%; color: #475569; font-weight: 600; }
+                    td.value { width: 65%; font-weight: 700; color: #0f172a; }
+                    .program-badge { display: inline-block; background-color: #e0e7ff; color: #3730a3; padding: 6px 12px; border-radius: 6px; font-weight: 800; font-size: 14px; margin-top: 4px; }
+                    .footer { display: flex; justify-content: space-between; margin-top: 40px; font-size: 12px; }
+                    .signature-box { text-align: center; width: 200px; }
+                    .signature-space { height: 60px; }
+                    @media print {
+                        body { padding: 0; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <img src="${APP_LOGO}" alt="Logo" />
+                    <div class="header-text">
+                        <h2>LEMBAGA PENDIDIKAN MA'ARIF NU</h2>
+                        <h3>MA NU 01 BANYUPUTIH BATANG</h3>
+                        <p>Jl. Lapangan 9A Banyuputih, Kec. Banyuputih, Kab. Batang, Jawa Tengah 51271</p>
+                    </div>
+                </div>
+
+                <div class="title">BUKTI RESMI PEMILIHAN PROGRAM LIFE SKILL</div>
+
+                <div class="card">
+                    <table>
+                        <tr>
+                            <td class="label">Nomor Induk Siswa (NIS)</td>
+                            <td class="value">: ${verifiedStudent.nis}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Nama Lengkap Siswa</td>
+                            <td class="value">: ${verifiedStudent.fullName}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Jenis Kelamin</td>
+                            <td class="value">: ${verifiedStudent.jenisKelamin}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Kelas / Rombel</td>
+                            <td class="value">: ${verifiedStudent.classLevel}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Nomor WhatsApp</td>
+                            <td class="value">: ${verifiedStudent.whatsappNumber || '-'}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Program Pilihan</td>
+                            <td class="value">: <span class="program-badge">${verifiedStudent.lifeSkill}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="label">Waktu Pendaftaran</td>
+                            <td class="value">: ${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} WIB</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <p style="font-size: 11px; color: #64748b; text-align: justify; line-height: 1.5;">
+                    * Simpan bukti pendaftaran ini sebagai tanda bukti resmi telah memilih program Life Skill MA NU 01 Banyuputih Tahun Pelajaran 2025/2026. Setiap siswa hanya dapat terdaftar pada 1 (satu) jenis program.
+                </p>
+
+                <div class="footer">
+                    <div class="signature-box">
+                        <p>Siswa Pendaftar,</p>
+                        <div class="signature-space"></div>
+                        <p><strong>${verifiedStudent.fullName}</strong></p>
+                    </div>
+                    <div class="signature-box">
+                        <p>Banyuputih, ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}<br/>Panitia Life Skill,</p>
+                        <div class="signature-space"></div>
+                        <p><strong>( ______________________ )</strong></p>
+                    </div>
+                </div>
+
+                <script>
+                    window.onload = function() { window.print(); }
+                </script>
+            </body>
+            </html>
+        `;
+
+        printWindow.document.write(html);
+        printWindow.document.close();
+    };
+
     return (
-        <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-start p-2.5 sm:p-4 md:p-6 selection:bg-indigo-500 selection:text-white">
-            {/* Top Bar for Mobile & Desktop */}
-            <div className="w-full max-w-3xl flex items-center justify-between py-2 px-1 mb-2">
+        <div className="min-h-screen bg-slate-100/80 flex flex-col items-center justify-start p-2.5 sm:p-4 md:p-6 selection:bg-indigo-500 selection:text-white">
+            {/* Header Top Bar */}
+            <div className="w-full max-w-4xl flex items-center justify-between py-2 px-1 mb-2">
                 <div className="flex items-center gap-2">
-                    <img src={APP_LOGO} alt="MA NU 01 Banyuputih" className="h-7 w-7 object-contain" referrerPolicy="no-referrer" />
-                    <span className="text-xs sm:text-sm font-bold text-slate-700 tracking-tight">
-                        MA NU 01 BANYUPUTIH
-                    </span>
+                    <img src={APP_LOGO} alt="MA NU 01 Banyuputih" className="h-7 w-7 sm:h-8 sm:w-8 object-contain" referrerPolicy="no-referrer" />
+                    <div>
+                        <span className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight block leading-tight">
+                            MA NU 01 BANYUPUTIH
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                            Portal Pendaftaran Life Skill
+                        </span>
+                    </div>
                 </div>
                 <Link
                     to="/login"
-                    className="text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1.5 active:scale-95 touch-manipulation"
+                    className="text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95 touch-manipulation"
                 >
                     <i className="fa-solid fa-lock text-indigo-600 text-xs"></i>
                     <span>Admin</span>
                 </Link>
             </div>
 
-            {/* Main Card Container */}
-            <div className="w-full max-w-3xl bg-white rounded-2xl sm:rounded-3xl shadow-lg sm:shadow-xl overflow-hidden border border-slate-200/80">
-                {/* Header Banner - Responsive for Small Screens */}
-                <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-indigo-800 px-4 py-6 sm:p-8 flex flex-col items-center text-center relative overflow-hidden">
-                    <div className="absolute -right-10 -bottom-10 w-36 h-36 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-                    <div className="absolute -left-10 -top-10 w-36 h-36 bg-indigo-400/20 rounded-full blur-xl pointer-events-none"></div>
-                    
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-indigo-100 text-[11px] font-medium backdrop-blur-sm mb-3 border border-white/20">
+            {/* Main Wrapper */}
+            <div className="w-full max-w-4xl bg-white rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden border border-slate-200/80">
+                {/* Hero Banner */}
+                <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-indigo-800 px-4 py-6 sm:py-8 sm:px-8 flex flex-col items-center text-center relative overflow-hidden">
+                    <div className="absolute -right-12 -bottom-12 w-44 h-44 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                    <div className="absolute -left-12 -top-12 w-44 h-44 bg-indigo-400/20 rounded-full blur-xl pointer-events-none"></div>
+
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-indigo-100 text-[11px] font-semibold backdrop-blur-sm mb-3 border border-white/20">
                         <i className="fa-solid fa-graduation-cap text-amber-300"></i>
                         <span>Tahun Pelajaran 2026 / 2027</span>
                     </div>
@@ -361,27 +456,27 @@ export const RegistrationPage: React.FC = () => {
                     <img
                         src={APP_LOGO}
                         alt="Logo MA NU 01 Banyuputih"
-                        className="h-16 w-16 sm:h-20 sm:w-20 mb-2.5 object-contain drop-shadow-md"
+                        className="h-16 w-16 sm:h-20 sm:w-20 mb-2 object-contain drop-shadow-md"
                         referrerPolicy="no-referrer"
                     />
                     <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-tight">
-                        Formulir Pendaftaran Life Skill
+                        Pemilihan Program Life Skill
                     </h1>
-                    <p className="text-indigo-100 mt-1 text-xs sm:text-sm font-medium">
-                        MA NU 01 Banyuputih Batang
+                    <p className="text-indigo-100 mt-1 text-xs sm:text-sm font-medium max-w-lg">
+                        Masukkan NIS Anda untuk memverifikasi data dan menentukan pilihan program Life Skill. Setiap siswa hanya dapat memilih 1 kali.
                     </p>
                 </div>
 
-                {/* Quota Section - Optimized for Touch & Mobile 2-Column Grid */}
-                <div className="p-3.5 sm:p-6 bg-slate-50/90 border-b border-slate-200">
+                {/* Quota Progress Section */}
+                <div className="p-4 sm:p-6 bg-slate-50/90 border-b border-slate-200">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3 sm:mb-4">
                         <div>
                             <div className="flex items-center gap-1.5 sm:gap-2">
                                 <span className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-indigo-100 text-indigo-700 text-xs sm:text-sm shrink-0">
                                     <i className="fa-solid fa-chart-pie"></i>
                                 </span>
-                                <h2 className="text-xs sm:text-base font-bold text-slate-800 tracking-tight">
-                                    INFORMASI KUOTA PENDAFTARAN
+                                <h2 className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight uppercase">
+                                    Status Kuota Program Life Skill
                                 </h2>
                                 <span className="relative flex h-2 w-2 ml-1" title="Real-time live sync aktif">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -389,12 +484,12 @@ export const RegistrationPage: React.FC = () => {
                                 </span>
                             </div>
                             <p className="text-[11px] text-slate-500 mt-0.5 ml-7.5 sm:ml-9">
-                                Klik / ketuk kartu di bawah untuk memilih langsung program pilihanmu.
+                                Kuota berkurang secara otomatis ketika siswa mengonfirmasi pilihannya.
                             </p>
                         </div>
 
                         {/* Overall Capacity Pill */}
-                        <div className="flex items-center justify-between sm:justify-end gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+                        <div className="flex items-center justify-between sm:justify-end gap-2.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
                             <div className="text-left sm:text-right">
                                 <div className="text-[10px] text-slate-500 font-medium leading-none">Total Terisi</div>
                                 <div className="text-xs font-bold text-indigo-700 mt-0.5">
@@ -415,8 +510,8 @@ export const RegistrationPage: React.FC = () => {
                         ></div>
                     </div>
 
-                    {/* 6 Life Skill Progress Cards - Mobile-first 2 columns */}
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+                    {/* 6 Life Skill Progress Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
                         {LIFE_SKILL_OPTIONS.map((skill) => {
                             const quota = LIFE_SKILL_QUOTAS[skill];
                             const registered = quotaCounts[skill] || 0;
@@ -425,7 +520,6 @@ export const RegistrationPage: React.FC = () => {
                             const percent = Math.min(100, Math.round((registered / (quota || 1)) * 100));
                             const skillMeta = SKILL_ICONS[skill] || { icon: 'fa-star', bg: 'bg-indigo-100', text: 'text-indigo-600' };
 
-                            // Dynamic color based on capacity percentage
                             let barColor = 'bg-indigo-600';
                             let badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
                             let statusText = `Sisa ${remaining}`;
@@ -440,18 +534,19 @@ export const RegistrationPage: React.FC = () => {
                                 statusText = `Sisa ${remaining}`;
                             }
 
-                            const isSelected = lifeSkill === skill;
+                            const isSelected = selectedProgram === skill;
 
                             return (
                                 <button
                                     type="button"
                                     key={skill}
                                     onClick={() => handleSelectSkillCard(skill)}
-                                    className={`p-2.5 sm:p-3.5 rounded-xl border text-left transition-all duration-200 relative flex flex-col justify-between select-none touch-manipulation active:scale-[0.97] min-h-[92px] ${
+                                    disabled={alreadySelected}
+                                    className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all duration-200 relative flex flex-col justify-between select-none touch-manipulation min-h-[92px] ${
                                         isFull
-                                            ? 'bg-rose-50/40 border-rose-200 opacity-90 cursor-not-allowed'
+                                            ? 'bg-rose-50/30 border-rose-200 opacity-90 cursor-not-allowed'
                                             : isSelected
-                                            ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-400/30 shadow-sm cursor-pointer'
+                                            ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-400/40 shadow-xs cursor-pointer'
                                             : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs cursor-pointer'
                                     }`}
                                 >
@@ -467,17 +562,17 @@ export const RegistrationPage: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-500 mb-1">
+                                        <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
                                             <span>
                                                 Terisi: <strong className="text-slate-800">{registered}</strong>/{quota}
                                             </span>
-                                            <span className={`px-1.5 py-0.5 rounded-full border text-[9px] sm:text-[10px] font-bold ${badgeClass}`}>
+                                            <span className={`px-1.5 py-0.5 rounded-full border text-[9px] font-bold ${badgeClass}`}>
                                                 {statusText}
                                             </span>
                                         </div>
                                     </div>
 
-                                    {/* Mini Real-time Progress Bar */}
+                                    {/* Mini Progress Bar */}
                                     <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200/60 mt-1">
                                         <div
                                             className={`h-full rounded-full transition-all duration-500 ease-out ${barColor}`}
@@ -486,8 +581,8 @@ export const RegistrationPage: React.FC = () => {
                                     </div>
 
                                     {isSelected && !isFull && (
-                                        <div className="mt-1 text-[9px] sm:text-[10px] font-bold text-indigo-600 flex items-center gap-1">
-                                            <i className="fa-solid fa-circle-check text-emerald-500"></i> Dipilih
+                                        <div className="mt-1 text-[9px] font-bold text-indigo-600 flex items-center gap-1">
+                                            <i className="fa-solid fa-circle-check text-emerald-500"></i> Terpilih
                                         </div>
                                     )}
                                 </button>
@@ -496,199 +591,302 @@ export const RegistrationPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Registration Form - Mobile Optimized Inputs */}
-                <form ref={formRef} onSubmit={handleSubmit} className="p-4 sm:p-8 space-y-4 sm:space-y-5">
-                    {/* Full Name */}
-                    <div>
-                        <label htmlFor="fullName" className="block text-xs sm:text-sm font-bold text-slate-700 mb-1">
-                            Nama Lengkap Siswa <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 text-sm">
-                                <i className="fa-solid fa-user"></i>
-                            </span>
-                            <input
-                                type="text"
-                                id="fullName"
-                                inputMode="text"
-                                autoCapitalize="characters"
-                                autoComplete="name"
-                                spellCheck="false"
-                                value={fullName}
-                                onInput={(e) => setFullName((e.target as HTMLInputElement).value.toUpperCase())}
-                                className="w-full pl-10 pr-4 py-3 sm:py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-xs text-base sm:text-sm font-medium"
-                                placeholder="Contoh: AHMAD FAUZI"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    {/* Gender Segmented Tap Buttons (Mobile Thumb Friendly) */}
-                    <div>
-                        <label className="block text-xs sm:text-sm font-bold text-slate-700 mb-1.5">
-                            Jenis Kelamin <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <button
-                                type="button"
-                                onClick={() => setJenisKelamin('Laki-laki')}
-                                className={`py-3 px-3 rounded-xl border flex items-center justify-center gap-2 text-sm font-semibold transition-all touch-manipulation min-h-[48px] active:scale-[0.98] ${
-                                    jenisKelamin === 'Laki-laki'
-                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                                        : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-300 hover:bg-slate-50'
-                                }`}
-                            >
-                                <i className="fa-solid fa-mars text-base"></i>
-                                <span>Laki-laki</span>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setJenisKelamin('Perempuan')}
-                                className={`py-3 px-3 rounded-xl border flex items-center justify-center gap-2 text-sm font-semibold transition-all touch-manipulation min-h-[48px] active:scale-[0.98] ${
-                                    jenisKelamin === 'Perempuan'
-                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                                        : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-300 hover:bg-slate-50'
-                                }`}
-                            >
-                                <i className="fa-solid fa-venus text-base"></i>
-                                <span>Perempuan</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Class & WhatsApp in Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                        <div>
-                            <label htmlFor="classLevel" className="block text-xs sm:text-sm font-bold text-slate-700 mb-1">
-                                Kelas <span className="text-rose-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 text-sm">
-                                    <i className="fa-solid fa-school"></i>
+                {/* Main Interactive Flow Area */}
+                <div ref={formRef} className="p-4 sm:p-8 space-y-6">
+                    {/* STEP 1: NIS INPUT & LOOKUP */}
+                    <div className="bg-slate-50 rounded-2xl p-4 sm:p-6 border border-slate-200">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center">
+                                    1
                                 </span>
-                                <select
-                                    id="classLevel"
-                                    value={classLevel}
-                                    onChange={(e) => setClassLevel(e.target.value as ClassLevel)}
-                                    className="w-full pl-10 pr-8 py-3 sm:py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-xs text-base sm:text-sm font-medium appearance-none cursor-pointer"
-                                    required
-                                >
-                                    <option value="" disabled>Pilih Kelas</option>
-                                    {CLASS_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                                <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400 text-xs">
-                                    <i className="fa-solid fa-chevron-down"></i>
-                                </span>
+                                <h3 className="text-sm sm:text-base font-bold text-slate-800">
+                                    Masukkan Nomor Induk Siswa (NIS)
+                                </h3>
                             </div>
+                            {verifiedStudent && (
+                                <button
+                                    type="button"
+                                    onClick={handleResetSearch}
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                                >
+                                    <i className="fa-solid fa-rotate-left"></i>
+                                    <span>Ganti NIS</span>
+                                </button>
+                            )}
                         </div>
 
-                        <div>
-                            <label htmlFor="whatsappNumber" className="block text-xs sm:text-sm font-bold text-slate-700 mb-1">
-                                Nomor WhatsApp Aktif <span className="text-rose-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-emerald-600 text-sm">
-                                    <i className="fa-brands fa-whatsapp font-bold"></i>
+                        <p className="text-xs text-slate-500 mb-3">
+                            Sistem akan mencocokkan NIS Anda dengan data resmi sekolah untuk menampilkan Nama, Kelas, dan Jenis Kelamin.
+                        </p>
+
+                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                            <div className="relative flex-grow">
+                                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 text-sm">
+                                    <i className="fa-solid fa-id-card"></i>
                                 </span>
                                 <input
-                                    type="tel"
-                                    id="whatsappNumber"
-                                    inputMode="tel"
-                                    autoComplete="tel"
-                                    value={whatsappNumber}
-                                    onChange={(e) => setWhatsappNumber(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 sm:py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-xs text-base sm:text-sm font-medium"
-                                    placeholder="081234567890"
-                                    required
+                                    type="text"
+                                    id="nisInput"
+                                    value={inputNis}
+                                    onChange={(e) => {
+                                        setInputNis(e.target.value);
+                                        if (searchError) setSearchError(null);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleSearchNIS();
+                                        }
+                                    }}
+                                    disabled={Boolean(verifiedStudent)}
+                                    placeholder="Masukkan NIS Anda (contoh: 202411001)"
+                                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm font-semibold tracking-wide disabled:bg-slate-100 disabled:text-slate-500 shadow-xs"
                                 />
                             </div>
-                        </div>
-                    </div>
 
-                    {/* Program Life Skill Dropdown */}
-                    <div>
-                        <div className="flex items-center justify-between mb-1">
-                            <label htmlFor="lifeSkill" className="block text-xs sm:text-sm font-bold text-slate-700">
-                                Pilihan Program Life Skill <span className="text-rose-500">*</span>
-                            </label>
-                            <span className="text-[11px] text-indigo-600 font-semibold flex items-center gap-1">
-                                <i className="fa-solid fa-bolt text-amber-500"></i> Kuota Live
-                            </span>
-                        </div>
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 text-sm">
-                                <i className="fa-solid fa-award"></i>
-                            </span>
-                            <select
-                                id="lifeSkill"
-                                value={lifeSkill}
-                                onChange={(e) => setLifeSkill(e.target.value as LifeSkill)}
-                                className="w-full pl-10 pr-8 py-3 sm:py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-xs text-base sm:text-sm font-medium appearance-none cursor-pointer"
-                                required
+                            <button
+                                type="button"
+                                onClick={() => handleSearchNIS()}
+                                disabled={isSearching || !inputNis.trim() || Boolean(verifiedStudent)}
+                                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 shrink-0 active:scale-95 touch-manipulation min-h-[48px]"
                             >
-                                <option value="" disabled>Pilih Program Life Skill</option>
-                                {LIFE_SKILL_OPTIONS.map(ls => {
-                                    const quota = LIFE_SKILL_QUOTAS[ls];
-                                    const isFull = isSkillFull(ls);
-                                    const remaining = getRemainingQuota(ls);
-                                    const registered = quotaCounts[ls] || 0;
-                                    const statusSuffix = isFull
-                                        ? ` - [PENUH (${registered}/${quota})]`
-                                        : ` (${registered}/${quota} - Sisa ${remaining})`;
-
-                                    return (
-                                        <option key={ls} value={ls} disabled={isFull}>
-                                            {ls} {statusSuffix}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                            <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400 text-xs">
-                                <i className="fa-solid fa-chevron-down"></i>
-                            </span>
+                                {isSearching ? (
+                                    <>
+                                        <i className="fa-solid fa-spinner fa-spin"></i>
+                                        <span>Memeriksa...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fa-solid fa-magnifying-glass"></i>
+                                        <span>Cek Data Siswa</span>
+                                    </>
+                                )}
+                            </button>
                         </div>
 
-                        {lifeSkill && (
-                            <div className="mt-2.5 p-3 rounded-xl bg-indigo-50/80 border border-indigo-100 flex items-center justify-between">
-                                <div className="text-xs text-indigo-900 flex items-center gap-2">
-                                    <i className="fa-solid fa-circle-check text-emerald-500 text-sm"></i>
-                                    <span>Program: <strong>{lifeSkill}</strong></span>
-                                </div>
-                                <div className="text-xs font-bold text-indigo-700">
-                                    Sisa {getRemainingQuota(lifeSkill)} kursi
+                        {/* Search Error Notice */}
+                        {searchError && (
+                            <div className="mt-3 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5 animate-fade-in">
+                                <i className="fa-solid fa-circle-exclamation text-rose-600 text-sm mt-0.5 shrink-0"></i>
+                                <div>
+                                    <span className="font-bold">Data Tidak Ditemukan:</span> {searchError}
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Submit Button */}
-                    <button
-                        type="submit"
-                        disabled={loading || (lifeSkill ? isSkillFull(lifeSkill) : false)}
-                        className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold py-3.5 sm:py-4 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 shadow-md hover:shadow-indigo-500/25 active:scale-[0.98] disabled:from-indigo-300 disabled:to-indigo-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-base touch-manipulation min-h-[52px]"
-                    >
-                        {loading ? (
-                            <>
-                                <i className="fa-solid fa-spinner fa-spin text-lg"></i>
-                                <span>Menyimpan Pendaftaran...</span>
-                            </>
-                        ) : (
-                            <>
-                                <i className="fa-solid fa-paper-plane text-base"></i>
-                                <span>Kirim Pendaftaran Sekarang</span>
-                            </>
-                        )}
-                    </button>
+                    {/* STEP 2: VERIFIED STUDENT IDENTITY CARD */}
+                    {verifiedStudent && (
+                        <div className="bg-white rounded-2xl p-4 sm:p-6 border-2 border-indigo-200 shadow-sm animate-fade-in space-y-4">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center">
+                                        2
+                                    </span>
+                                    <h3 className="text-sm sm:text-base font-bold text-slate-800">
+                                        Data Identitas Siswa Terverifikasi
+                                    </h3>
+                                </div>
+                                <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-extrabold flex items-center gap-1">
+                                    <i className="fa-solid fa-circle-check text-emerald-600"></i> Terverifikasi
+                                </span>
+                            </div>
 
-                    <p className="text-[11px] text-center text-slate-400">
-                        Pastikan seluruh data yang dimasukkan sudah benar sebelum mengirim.
-                    </p>
-                </form>
+                            {/* Info Table / Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                                <div>
+                                    <div className="text-[10px] uppercase font-bold text-slate-400">NIS</div>
+                                    <div className="text-sm font-mono font-bold text-indigo-700 mt-0.5">{verifiedStudent.nis}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] uppercase font-bold text-slate-400">Nama Lengkap</div>
+                                    <div className="text-sm font-bold text-slate-800 mt-0.5">{verifiedStudent.fullName}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] uppercase font-bold text-slate-400">Kelas</div>
+                                    <div className="text-sm font-bold text-slate-800 mt-0.5">Kelas {verifiedStudent.classLevel}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] uppercase font-bold text-slate-400">Jenis Kelamin</div>
+                                    <div className="text-sm font-semibold text-slate-700 mt-0.5">{verifiedStudent.jenisKelamin}</div>
+                                </div>
+                            </div>
+
+                            {/* ALREADY REGISTERED STATUS CARD */}
+                            {alreadySelected ? (
+                                <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200 text-amber-900 space-y-3">
+                                    <div className="flex items-start gap-3">
+                                        <span className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-lg shrink-0">
+                                            <i className="fa-solid fa-circle-info"></i>
+                                        </span>
+                                        <div>
+                                            <h4 className="font-extrabold text-sm sm:text-base text-amber-900">
+                                                Anda Sudah Terdaftar pada Program: {verifiedStudent.lifeSkill}
+                                            </h4>
+                                            <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                                                Data pendaftaran Anda telah tercatat secara resmi. Setiap siswa hanya diperbolehkan memilih 1 (satu) kali agar tidak ada data ganda.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-amber-200/80">
+                                        <button
+                                            type="button"
+                                            onClick={handlePrintReceipt}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+                                        >
+                                            <i className="fa-solid fa-print"></i>
+                                            <span>Cetak Bukti Pendaftaran</span>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleResetSearch}
+                                            className="px-4 py-2 bg-white hover:bg-slate-50 border border-amber-300 text-amber-900 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
+                                        >
+                                            <i className="fa-solid fa-user-plus"></i>
+                                            <span>Cek Siswa / NIS Lain</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* NOT YET SELECTED - OPEN SELECTION */
+                                <div className="p-3.5 rounded-xl bg-indigo-50/80 border border-indigo-100 flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">
+                                        <i className="fa-solid fa-sparkles text-amber-500 text-sm"></i>
+                                        <span>Status: Belum Memilih — Silakan tentukan program Life Skill Anda pada Langkah 3 di bawah.</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* STEP 3: CHOOSE LIFE SKILL (Only active if verified and hasn't chosen yet) */}
+                    {verifiedStudent && !alreadySelected && (
+                        <form onSubmit={handleSubmitChoice} className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm animate-fade-in space-y-5">
+                            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                                <span className="w-6 h-6 rounded-full bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center">
+                                    3
+                                </span>
+                                <div>
+                                    <h3 className="text-sm sm:text-base font-bold text-slate-800">
+                                        Pilih Program Life Skill Pilihanmu
+                                    </h3>
+                                    <p className="text-xs text-slate-500">
+                                        Klik pada salah satu pilihan program Life Skill di bawah ini:
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* 6 Program Visual Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {LIFE_SKILL_OPTIONS.map((skill) => {
+                                    const quota = LIFE_SKILL_QUOTAS[skill];
+                                    const registered = quotaCounts[skill] || 0;
+                                    const remaining = getRemainingQuota(skill);
+                                    const isFull = isSkillFull(skill);
+                                    const isSelected = selectedProgram === skill;
+                                    const meta = SKILL_ICONS[skill] || { icon: 'fa-star', bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200', desc: '' };
+
+                                    return (
+                                        <div
+                                            key={skill}
+                                            onClick={() => handleSelectSkillCard(skill)}
+                                            className={`p-4 rounded-2xl border-2 transition-all relative flex flex-col justify-between cursor-pointer select-none ${
+                                                isFull
+                                                    ? 'bg-rose-50/30 border-rose-200 opacity-80 cursor-not-allowed'
+                                                    : isSelected
+                                                    ? 'bg-indigo-50/70 border-indigo-600 shadow-md ring-2 ring-indigo-400/30 scale-[1.02]'
+                                                    : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs'
+                                            }`}
+                                        >
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className={`w-9 h-9 rounded-xl ${meta.bg} ${meta.text} flex items-center justify-center text-base shadow-xs`}>
+                                                        <i className={`fa-solid ${meta.icon}`}></i>
+                                                    </span>
+                                                    {isFull ? (
+                                                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-extrabold border border-rose-200">
+                                                            KUOTA PENUH
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200">
+                                                            Sisa {remaining} Kursi
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <h4 className="font-extrabold text-sm text-slate-800">
+                                                    {skill}
+                                                </h4>
+                                                <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                                                    {meta.desc}
+                                                </p>
+                                            </div>
+
+                                            <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                                                <div className="text-[11px] text-slate-500 font-medium">
+                                                    Terisi: <strong>{registered}</strong> / {quota}
+                                                </div>
+                                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-xs ${
+                                                    isSelected 
+                                                        ? 'bg-indigo-600 border-indigo-600 text-white' 
+                                                        : 'border-slate-300 text-transparent'
+                                                }`}>
+                                                    <i className="fa-solid fa-check text-[10px]"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Optional WhatsApp Confirmation Field */}
+                            <div>
+                                <label htmlFor="waInput" className="block text-xs font-bold text-slate-700 mb-1">
+                                    Nomor WhatsApp Aktif (untuk info grup & jadwal praktik)
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-emerald-600 text-sm">
+                                        <i className="fa-brands fa-whatsapp font-bold"></i>
+                                    </span>
+                                    <input
+                                        type="tel"
+                                        id="waInput"
+                                        value={whatsappInput}
+                                        onChange={(e) => setWhatsappInput(e.target.value)}
+                                        placeholder="081234567890"
+                                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-medium shadow-xs"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Submit Button */}
+                            <button
+                                type="submit"
+                                disabled={isSubmitting || !selectedProgram || (selectedProgram ? isSkillFull(selectedProgram) : false)}
+                                className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white font-extrabold py-3.5 px-4 rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 text-base active:scale-98 touch-manipulation min-h-[52px]"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <i className="fa-solid fa-spinner fa-spin text-lg"></i>
+                                        <span>Menyimpan Pilihan Anda...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fa-solid fa-paper-plane text-base"></i>
+                                        <span>Konfirmasi & Simpan Pilihan Life Skill</span>
+                                    </>
+                                )}
+                            </button>
+                        </form>
+                    )}
+                </div>
             </div>
-            
+
             <footer className="text-center py-4 text-xs text-slate-500 mt-2">
-                &copy; {new Date().getFullYear()} MA NU 01 Banyuputih. All rights reserved.
+                &copy; {new Date().getFullYear()} MA NU 01 Banyuputih Batang. All rights reserved.
             </footer>
         </div>
     );

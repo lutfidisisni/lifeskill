@@ -4,27 +4,46 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieC
 import { LifeSkill, type Student, type ClassLevel } from '../types';
 import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, LIFE_SKILL_QUOTAS, APP_LOGO, API_BASE_URL } from '../constants';
 import { StudentModal } from '../components/StudentModal';
+import { BulkImportModal } from '../components/BulkImportModal';
 import { useStudents } from '../hooks/useStudents';
 
 declare const Swal: any;
 declare const XLSX: any;
 
-type AdminView = 'dashboard' | 'report-class' | 'report-lifeskill' | 'summary' | 'presensi';
+type AdminView = 'dashboard' | 'master-data' | 'report-class' | 'report-lifeskill' | 'summary' | 'presensi';
 type SortConfig = { key: keyof Student; direction: 'ascending' | 'descending' } | null;
 
 export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState<AdminView>('dashboard');
     const [isModalOpen, setModalOpen] = useState(false);
+    const [isBulkImportOpen, setBulkImportOpen] = useState(false);
     const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
     const [filter, setFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'' | 'selected' | 'unselected'>('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fullName', direction: 'ascending' });
+    const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'nis', direction: 'ascending' });
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [summaryLifeSkillFilter, setSummaryLifeSkillFilter] = useState<LifeSkill | '' | 'SEMUA'>('');
     const [summaryClassFilter, setSummaryClassFilter] = useState<ClassLevel | '' | 'SEMUA'>('');
     const [selectedLifeSkillForAttendance, setSelectedLifeSkillForAttendance] = useState<LifeSkill | ''>('');
 
-    const { students, loading, error, addStudent, updateStudent, deleteStudent, fetchStudents, clearAllStudents } = useStudents();
+    // Checkbox selection state for Bulk Actions
+    const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+
+    const {
+        students,
+        loading,
+        error,
+        addStudent,
+        updateStudent,
+        deleteStudent,
+        deleteBulkStudents,
+        resetStudentChoices,
+        bulkImportStudents,
+        fetchStudents,
+        clearAllStudents
+    } = useStudents();
+
     const navigate = useNavigate();
 
     const handleChangePassword = async () => {
@@ -105,6 +124,7 @@ export const AdminPage: React.FC = () => {
 
     const handleRefreshData = async () => {
         await fetchStudents();
+        setSelectedStudentIds([]);
         Swal.fire({
             icon: 'success',
             title: 'Sinkronisasi Selesai',
@@ -116,8 +136,8 @@ export const AdminPage: React.FC = () => {
 
     const handleClearAllData = () => {
         Swal.fire({
-            title: 'Kosongkan Semua Data Pendaftar?',
-            text: 'Semua data pendaftaran siswa akan dihapus dari server MySQL dan penyimpanan lokal. Tindakan ini tidak dapat dibatalkan.',
+            title: 'Kosongkan Semua Data Siswa?',
+            text: 'Seluruh Master Data dan data pilihan siswa akan dihapus dari server MySQL dan penyimpanan lokal. Tindakan ini tidak dapat dibatalkan.',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#ef4444',
@@ -127,10 +147,11 @@ export const AdminPage: React.FC = () => {
         }).then(async (result: any) => {
             if (result.isConfirmed) {
                 await clearAllStudents();
+                setSelectedStudentIds([]);
                 Swal.fire({
                     icon: 'success',
                     title: 'Data Berhasil Dikosongkan',
-                    text: 'Seluruh data pendaftar telah dibersihkan.',
+                    text: 'Seluruh data master siswa telah dibersihkan.',
                     timer: 1500,
                     showConfirmButton: false
                 });
@@ -139,7 +160,7 @@ export const AdminPage: React.FC = () => {
     };
     
     useEffect(() => {
-        if(isSidebarOpen) {
+        if (isSidebarOpen) {
             setSidebarOpen(false);
         }
     }, [activeView]);
@@ -150,6 +171,85 @@ export const AdminPage: React.FC = () => {
         }
     }, [error]);
 
+    // Checkbox toggles
+    const handleToggleSelectAll = (filteredIds: string[]) => {
+        if (filteredIds.every(id => selectedStudentIds.includes(id))) {
+            setSelectedStudentIds(prev => prev.filter(id => !filteredIds.includes(id)));
+        } else {
+            setSelectedStudentIds(prev => Array.from(new Set([...prev, ...filteredIds])));
+        }
+    };
+
+    const handleToggleSelectRow = (id: string) => {
+        setSelectedStudentIds(prev =>
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    // Bulk Delete
+    const handleBulkDelete = () => {
+        if (selectedStudentIds.length === 0) return;
+
+        Swal.fire({
+            title: `Hapus ${selectedStudentIds.length} Siswa Terpilih?`,
+            text: `Data ${selectedStudentIds.length} siswa akan dihapus permanen dari Master Data. Tindakan ini tidak dapat dibatalkan.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: `Ya, Hapus (${selectedStudentIds.length}) Data`,
+            cancelButtonText: 'Batal'
+        }).then(async (result: any) => {
+            if (result.isConfirmed) {
+                try {
+                    await deleteBulkStudents(selectedStudentIds);
+                    setSelectedStudentIds([]);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Berhasil Dihapus',
+                        text: 'Data siswa terpilih telah dihapus dari sistem.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                } catch (err: any) {
+                    Swal.fire('Gagal!', err.message || 'Gagal menghapus data siswa.', 'error');
+                }
+            }
+        });
+    };
+
+    // Bulk Reset Life Skill Choices
+    const handleBulkResetChoices = () => {
+        if (selectedStudentIds.length === 0) return;
+
+        Swal.fire({
+            title: `Reset Pilihan ${selectedStudentIds.length} Siswa?`,
+            text: `Pilihan Life Skill untuk ${selectedStudentIds.length} siswa akan dikosongkan (status: Belum Memilih), sehingga siswa dapat memilih kembali melalui portal pendaftaran.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#f59e0b',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: `Ya, Reset Pilihan (${selectedStudentIds.length}) Siswa`,
+            cancelButtonText: 'Batal'
+        }).then(async (result: any) => {
+            if (result.isConfirmed) {
+                try {
+                    await resetStudentChoices(selectedStudentIds);
+                    setSelectedStudentIds([]);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Pilihan Direset',
+                        text: 'Pilihan Life Skill siswa terpilih telah dikosongkan.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                } catch (err: any) {
+                    Swal.fire('Gagal!', err.message || 'Gagal mereset pilihan siswa.', 'error');
+                }
+            }
+        });
+    };
+
     const printContent = (title: string, content: string) => {
         const printWindow = window.open('', '_blank');
         if (printWindow) {
@@ -159,10 +259,10 @@ export const AdminPage: React.FC = () => {
                     <title>Cetak - ${title}</title>
                     <link rel="preconnect" href="https://fonts.googleapis.com">
                     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+                    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
                     <style>
-                        @media print { @page { size: 8.5in 13in; margin: 2cm 1.5cm; } }
-                        body { font-family: 'Poppins', sans-serif; color: #000; }
+                        @media print { @page { size: 8.5in 13in; margin: 1.5cm 1.2cm; } }
+                        body { font-family: 'Plus Jakarta Sans', sans-serif; color: #000; }
                         .kop-sekolah { 
                             display: flex;
                             align-items: center;
@@ -170,34 +270,34 @@ export const AdminPage: React.FC = () => {
                             text-align: left;
                             border-bottom: 3px solid black; 
                             padding-bottom: 10px; 
-                            margin-bottom: 25px; 
+                            margin-bottom: 20px; 
                         }
                         .kop-sekolah img {
-                             width: 85px;
-                             height: 85px;
+                             width: 80px;
+                             height: 80px;
+                             object-fit: contain;
                         }
                         .kop-sekolah .text-container { flex-grow: 1; text-align: center; }
-                        .kop-sekolah h2, .kop-sekolah h3, .kop-sekolah p { margin: 0; line-height: 1.4; }
-                        .kop-sekolah h2 { font-size: 16pt; font-weight: 600; }
-                        .kop-sekolah h3 { font-size: 18pt; font-weight: 700; }
-                        .kop-sekolah p { font-size: 11pt; font-weight: 400; }
-                        .report-main-title { text-align: center; font-size: 14pt; font-weight: bold; margin-bottom: 20px; text-transform: uppercase; text-decoration: underline; }
-                        .table-title { font-size: 12pt; font-weight: bold; margin-top: 20px; margin-bottom: 10px; }
-                        table { width: 100%; border-collapse: collapse; font-size: 11pt; }
-                        th, td { border: 1px solid black; padding: 6px; text-align: left; vertical-align: top; }
-                        th { font-weight: bold; background-color: #EFEFEF; text-align: center; }
+                        .kop-sekolah h2, .kop-sekolah h3, .kop-sekolah p { margin: 0; line-height: 1.35; }
+                        .kop-sekolah h2 { font-size: 15pt; font-weight: 700; }
+                        .kop-sekolah h3 { font-size: 17pt; font-weight: 800; }
+                        .kop-sekolah p { font-size: 10pt; font-weight: 400; color: #333; }
+                        .report-main-title { text-align: center; font-size: 13pt; font-weight: bold; margin-bottom: 18px; text-transform: uppercase; text-decoration: underline; }
+                        table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+                        th, td { border: 1px solid black; padding: 5px 6px; text-align: left; vertical-align: middle; }
+                        th { font-weight: bold; background-color: #f1f5f9; text-align: center; }
                         td.number, td.center { text-align: center; }
-                        td.signature { width: 35%; }
-                        tfoot td { font-weight: bold; background-color: #EFEFEF; }
+                        td.signature { width: 30%; }
+                        tfoot td { font-weight: bold; background-color: #f1f5f9; }
                     </style>
                 </head>
                 <body>
                     <div class="kop-sekolah">
                          <img src="${APP_LOGO}" alt="Logo Sekolah" />
                          <div class="text-container">
-                             <h2>LEMBAGA PENDIDIKAN MAARIF NU</h2>
-                             <h3>MA NU 01 BANYUPUTIH</h3>
-                             <p>Alamat : Jl. Lapangan 9A Banyuputih Batang Jawa Tengah, 51271</p>
+                             <h2>LEMBAGA PENDIDIKAN MA'ARIF NU</h2>
+                             <h3>MA NU 01 BANYUPUTIH BATANG</h3>
+                             <p>Jl. Lapangan 9A Banyuputih, Kec. Banyuputih, Kab. Batang, Jawa Tengah 51271</p>
                          </div>
                     </div>
                     <div class="report-main-title">${title}</div>
@@ -261,34 +361,57 @@ export const AdminPage: React.FC = () => {
         try {
             if ('id' in studentData) {
                 await updateStudent(studentData);
-                Swal.fire({title: 'Sukses!', text: 'Data siswa berhasil diperbarui.', icon: 'success', confirmButtonColor: '#10b981'});
+                Swal.fire({ title: 'Sukses!', text: 'Data siswa berhasil diperbarui.', icon: 'success', confirmButtonColor: '#10b981' });
             } else {
                 await addStudent(studentData);
-                Swal.fire({title: 'Sukses!', text: 'Siswa baru berhasil ditambahkan.', icon: 'success', confirmButtonColor: '#10b981'});
+                Swal.fire({ title: 'Sukses!', text: 'Siswa baru berhasil ditambahkan.', icon: 'success', confirmButtonColor: '#10b981' });
             }
             setModalOpen(false);
         } catch (err: any) {
-            Swal.fire({title: 'Gagal!', text: err.message || 'Gagal menyimpan data siswa.', icon: 'error', confirmButtonColor: '#d33'});
+            Swal.fire({ title: 'Gagal!', text: err.message || 'Gagal menyimpan data siswa.', icon: 'error', confirmButtonColor: '#d33' });
         }
     };
 
     const handleDeleteStudent = (student: Student) => {
         Swal.fire({
-            title: 'Anda yakin?',
-            text: `Anda akan menghapus data siswa "${student.fullName}". Aksi ini tidak dapat dibatalkan.`,
+            title: 'Hapus Siswa Ini?',
+            text: `Anda akan menghapus data siswa "${student.fullName}" (NIS: ${student.nis}).`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Ya, hapus!',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Ya, Hapus!',
             cancelButtonText: 'Batal'
-        }).then(async (result:any) => {
+        }).then(async (result: any) => {
             if (result.isConfirmed) {
                 try {
                     await deleteStudent(student.id);
+                    setSelectedStudentIds(prev => prev.filter(id => id !== student.id));
                     Swal.fire('Terhapus!', 'Data siswa telah dihapus.', 'success');
                 } catch (err: any) {
                     Swal.fire('Gagal!', err.message || 'Gagal menghapus data siswa.', 'error');
+                }
+            }
+        });
+    };
+
+    const handleResetSingleChoice = (student: Student) => {
+        Swal.fire({
+            title: 'Reset Pilihan Siswa?',
+            text: `Pilihan Life Skill untuk siswa "${student.fullName}" (${student.lifeSkill}) akan dikosongkan agar siswa dapat memilih ulang.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#f59e0b',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Ya, Reset Pilihan',
+            cancelButtonText: 'Batal'
+        }).then(async (result: any) => {
+            if (result.isConfirmed) {
+                try {
+                    await resetStudentChoices([student.id]);
+                    Swal.fire('Berhasil!', 'Pilihan Life Skill siswa telah dikosongkan.', 'success');
+                } catch (err: any) {
+                    Swal.fire('Gagal!', err.message || 'Gagal mereset pilihan.', 'error');
                 }
             }
         });
@@ -316,21 +439,30 @@ export const AdminPage: React.FC = () => {
     const filteredAndSortedStudents = useMemo(() => {
         let result: Student[] = [...students];
 
-        if (filter) {
-            if (activeView === 'report-class') {
+        // View-based filters
+        if (activeView === 'report-class' && filter) {
+            result = result.filter(s => s.classLevel === filter);
+        } else if (activeView === 'report-lifeskill' && filter) {
+            result = result.filter(s => s.lifeSkill === filter);
+        } else if (activeView === 'master-data') {
+            if (filter) {
                 result = result.filter(s => s.classLevel === filter);
-            } else if (activeView === 'report-lifeskill') {
-                result = result.filter(s => s.lifeSkill === filter);
+            }
+            if (statusFilter === 'selected') {
+                result = result.filter(s => s.lifeSkill && s.lifeSkill.trim() !== '');
+            } else if (statusFilter === 'unselected') {
+                result = result.filter(s => !s.lifeSkill || s.lifeSkill.trim() === '');
             }
         }
 
         if (searchQuery) {
             const lowercasedQuery = searchQuery.toLowerCase();
             result = result.filter(s => 
+                (s.nis || '').toLowerCase().includes(lowercasedQuery) ||
                 s.fullName.toLowerCase().includes(lowercasedQuery) ||
                 s.jenisKelamin.toLowerCase().includes(lowercasedQuery) ||
                 s.classLevel.toLowerCase().includes(lowercasedQuery) ||
-                s.whatsappNumber.toLowerCase().includes(lowercasedQuery) ||
+                (s.whatsappNumber || '').toLowerCase().includes(lowercasedQuery) ||
                 (s.lifeSkill || '').toLowerCase().includes(lowercasedQuery)
             );
         }
@@ -346,7 +478,7 @@ export const AdminPage: React.FC = () => {
         }
 
         return result;
-    }, [students, filter, searchQuery, activeView, sortConfig]);
+    }, [students, filter, statusFilter, searchQuery, activeView, sortConfig]);
 
     const detailedCountSummary = useMemo(() => {
         if (summaryLifeSkillFilter === '' || summaryClassFilter === '') {
@@ -423,15 +555,16 @@ export const AdminPage: React.FC = () => {
         }
         
         const title = `DAFTAR HADIR PESERTA LIFE SKILL ${selectedLifeSkillForAttendance.toUpperCase()}`;
-        const dateLine = `<p style="font-size: 12pt; margin-bottom: 15px; font-weight: bold;">Hari/Tanggal: .......................................</p>`;
+        const dateLine = `<p style="font-size: 11pt; margin-bottom: 15px; font-weight: bold;">Hari/Tanggal: .......................................</p>`;
 
         const tableHeader = `
             <thead>
                 <tr>
                     <th style="width: 5%;">No.</th>
+                    <th style="width: 15%;">NIS</th>
                     <th>Nama Lengkap</th>
-                    <th style="width: 15%;">Kelas</th>
-                    <th style="width: 30%;">Tanda Tangan</th>
+                    <th style="width: 12%;">Kelas</th>
+                    <th style="width: 25%;">Tanda Tangan</th>
                 </tr>
             </thead>`;
         
@@ -440,6 +573,7 @@ export const AdminPage: React.FC = () => {
                 ${attendanceStudents.map((s, index) => `
                     <tr>
                         <td style="text-align: center;">${index + 1}</td>
+                        <td style="text-align: center; font-family: monospace; font-weight: bold;">${s.nis || '-'}</td>
                         <td>${s.fullName}</td>
                         <td style="text-align: center;">${s.classLevel}</td>
                         <td>${index + 1}.</td>
@@ -460,7 +594,6 @@ export const AdminPage: React.FC = () => {
         `;
         
         const content = dateLine + tableHtml + tutorSignature;
-
         printContent(title, content);
     };
 
@@ -477,101 +610,374 @@ export const AdminPage: React.FC = () => {
         
         switch (activeView) {
             case 'dashboard':
-                return <DashboardView students={students} isLoading={loading} />;
-            case 'report-class':
-            case 'report-lifeskill': {
-                 const isClassReport = activeView === 'report-class';
-                 const reportTitle = isClassReport ? 'Laporan per Kelas' : 'Laporan per Pilihan Life Skill';
-                 const filterOptions = isClassReport ? CLASS_OPTIONS : LIFE_SKILL_OPTIONS;
-                 const filterLabel = isClassReport ? 'Filter Kelas' : 'Filter Life Skill';
-                 
-                 const dataToDownload = filteredAndSortedStudents.map(({id, createdAt, updatedAt, ...rest}, index) => ({
+                return <DashboardView students={students} isLoading={loading} onOpenImport={() => setBulkImportOpen(true)} />;
+            
+            case 'master-data': {
+                const filteredIds = filteredAndSortedStudents.map(s => s.id);
+                const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedStudentIds.includes(id));
+                const isAnySelected = selectedStudentIds.length > 0;
+
+                const dataToDownload = filteredAndSortedStudents.map(({ id, createdAt, updatedAt, ...rest }, index) => ({
                     'No.': index + 1,
+                    'NIS': rest.nis || '',
                     'Nama Lengkap': rest.fullName,
                     'Jenis Kelamin': rest.jenisKelamin,
                     'Kelas': rest.classLevel,
-                    'No. WhatsApp': rest.whatsappNumber,
+                    'No. WhatsApp': rest.whatsappNumber || '',
+                    'Pilihan Life Skill': rest.lifeSkill || 'Belum Memilih',
+                }));
+
+                return (
+                    <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-md border border-slate-200/80 animate-fade-in space-y-4">
+                        {/* Title & Top Action Buttons */}
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 pb-4">
+                            <div>
+                                <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2">
+                                    <i className="fa-solid fa-users-gear text-indigo-600"></i>
+                                    <span>Master Data Siswa & Pengelolaan Pilihan</span>
+                                </h2>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Upload data siswa resmi agar siswa cukup memasukkan NIS saat memilih program Life Skill.
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setBulkImportOpen(true)}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+                                >
+                                    <i className="fa-solid fa-file-excel text-sm"></i>
+                                    <span>Upload Excel / CSV</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={openCreateModal}
+                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+                                >
+                                    <i className="fa-solid fa-user-plus text-sm"></i>
+                                    <span>Tambah Siswa Manual</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Search & Filters */}
+                        <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3">
+                            <div className="flex flex-col sm:flex-row items-center gap-2.5 flex-grow">
+                                <div className="relative w-full sm:w-64">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                                        <i className="fa-solid fa-magnifying-glass text-xs"></i>
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="Cari NIS / Nama Siswa..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                    <select
+                                        value={filter}
+                                        onChange={(e) => setFilter(e.target.value)}
+                                        className="w-full sm:w-36 px-2.5 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500"
+                                    >
+                                        <option value="">Semua Kelas</option>
+                                        {CLASS_OPTIONS.map(c => <option key={c} value={c}>Kelas {c}</option>)}
+                                    </select>
+
+                                    <select
+                                        value={statusFilter}
+                                        onChange={(e) => setStatusFilter(e.target.value as any)}
+                                        className="w-full sm:w-44 px-2.5 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500"
+                                    >
+                                        <option value="">Semua Status</option>
+                                        <option value="selected">Sudah Memilih</option>
+                                        <option value="unselected">Belum Memilih</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-end lg:self-auto">
+                                <button
+                                    onClick={() => printContent("Master Data Siswa & Pilihan Life Skill", tableToHtml(dataToDownload))}
+                                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
+                                >
+                                    <i className="fa-solid fa-print"></i> Cetak
+                                </button>
+                                <button
+                                    onClick={() => handleDownload(dataToDownload, 'Master_Data_Siswa')}
+                                    className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
+                                >
+                                    <i className="fa-solid fa-file-arrow-down"></i> Unduh Excel
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Bulk Action Sticky Bar when items are selected */}
+                        {isAnySelected && (
+                            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-wrap items-center justify-between gap-2.5 animate-fade-in">
+                                <div className="text-xs font-bold text-indigo-900 flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs">
+                                        {selectedStudentIds.length}
+                                    </span>
+                                    <span>siswa dipilih dari tabel</span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleBulkResetChoices}
+                                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center gap-1.5"
+                                        title="Kosongkan pilihan Life Skill siswa terpilih agar dapat memilih ulang"
+                                    >
+                                        <i className="fa-solid fa-rotate-left"></i>
+                                        <span>Reset Pilihan ({selectedStudentIds.length})</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleBulkDelete}
+                                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-xs transition-all flex items-center gap-1.5"
+                                        title="Hapus permanen data siswa terpilih"
+                                    >
+                                        <i className="fa-solid fa-trash"></i>
+                                        <span>Hapus Siswa Terpilih ({selectedStudentIds.length})</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Master Data Table */}
+                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-white">
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full bg-white text-xs">
+                                    <thead className="bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200 select-none">
+                                        <tr>
+                                            <th className="py-3 px-3 text-center w-10">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={allSelected}
+                                                    onChange={() => handleToggleSelectAll(filteredIds)}
+                                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                                                    title="Pilih Semua di Halaman Ini"
+                                                />
+                                            </th>
+                                            <th className="py-3 px-2 text-center w-10">No</th>
+                                            <ThSortable title="NIS" sortKey="nis" sortConfig={sortConfig} onRequestSort={requestSort} />
+                                            <ThSortable title="Nama Lengkap Siswa" sortKey="fullName" sortConfig={sortConfig} onRequestSort={requestSort} />
+                                            <ThSortable title="JK" sortKey="jenisKelamin" sortConfig={sortConfig} onRequestSort={requestSort} />
+                                            <ThSortable title="Kelas" sortKey="classLevel" sortConfig={sortConfig} onRequestSort={requestSort} />
+                                            <th className="py-3 px-3 text-left">WhatsApp</th>
+                                            <ThSortable title="Status / Pilihan Life Skill" sortKey="lifeSkill" sortConfig={sortConfig} onRequestSort={requestSort} />
+                                            <th className="py-3 px-3 text-center w-28">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {filteredAndSortedStudents.map((s, index) => {
+                                            const isChecked = selectedStudentIds.includes(s.id);
+                                            const hasChosen = Boolean(s.lifeSkill && s.lifeSkill.trim() !== '');
+
+                                            return (
+                                                <tr
+                                                    key={s.id}
+                                                    className={`hover:bg-indigo-50/30 transition-colors ${isChecked ? 'bg-indigo-50/50' : ''}`}
+                                                >
+                                                    <td className="py-2.5 px-3 text-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isChecked}
+                                                            onChange={() => handleToggleSelectRow(s.id)}
+                                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                                                        />
+                                                    </td>
+                                                    <td className="py-2.5 px-2 text-center text-slate-400 font-medium">
+                                                        {index + 1}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
+                                                        {s.nis || '-'}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 font-bold text-slate-800">
+                                                        {s.fullName}
+                                                    </td>
+                                                    <td className="py-2.5 px-3">
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                            s.jenisKelamin === 'Laki-laki' 
+                                                                ? 'bg-blue-50 text-blue-700' 
+                                                                : 'bg-rose-50 text-rose-700'
+                                                        }`}>
+                                                            {s.jenisKelamin}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2.5 px-3">
+                                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold">
+                                                            {s.classLevel}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-slate-600">
+                                                        {s.whatsappNumber || '-'}
+                                                    </td>
+                                                    <td className="py-2.5 px-3">
+                                                        {hasChosen ? (
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[11px] font-bold">
+                                                                <i className="fa-solid fa-circle-check text-indigo-600 text-[10px]"></i>
+                                                                <span>{s.lifeSkill}</span>
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-medium italic">
+                                                                <i className="fa-solid fa-hourglass-start text-[10px]"></i>
+                                                                <span>Belum Memilih</span>
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-center">
+                                                        <div className="flex items-center justify-center gap-1.5">
+                                                            {hasChosen && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleResetSingleChoice(s)}
+                                                                    className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-colors"
+                                                                    title="Reset pilihan siswa ini agar dapat memilih ulang"
+                                                                >
+                                                                    <i className="fa-solid fa-rotate-left text-xs"></i>
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEditModal(s)}
+                                                                className="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors"
+                                                                title="Ubah data siswa"
+                                                            >
+                                                                <i className="fa-solid fa-pencil text-xs"></i>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteStudent(s)}
+                                                                className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition-colors"
+                                                                title="Hapus data siswa"
+                                                            >
+                                                                <i className="fa-solid fa-trash text-xs"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {filteredAndSortedStudents.length === 0 && (
+                                            <tr>
+                                                <td colSpan={9} className="text-center py-10 text-slate-400 font-medium">
+                                                    Tidak ada data siswa yang cocok dengan kriteria pencarian / filter.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            case 'report-class':
+            case 'report-lifeskill': {
+                const isClassReport = activeView === 'report-class';
+                const reportTitle = isClassReport ? 'Laporan per Kelas' : 'Laporan per Pilihan Life Skill';
+                const filterOptions = isClassReport ? CLASS_OPTIONS : LIFE_SKILL_OPTIONS;
+                const filterLabel = isClassReport ? 'Filter Kelas' : 'Filter Life Skill';
+                 
+                const dataToDownload = filteredAndSortedStudents.map(({ id, createdAt, updatedAt, ...rest }, index) => ({
+                    'No.': index + 1,
+                    'NIS': rest.nis || '',
+                    'Nama Lengkap': rest.fullName,
+                    'Jenis Kelamin': rest.jenisKelamin,
+                    'Kelas': rest.classLevel,
+                    'No. WhatsApp': rest.whatsappNumber || '',
                     'Pilihan Life Skill': rest.lifeSkill || 'Belum Ditentukan',
                 }));
-                 const dataToPrint = dataToDownload;
 
                 let printTitle = `Laporan Pendaftar Life Skill`;
                 if (filter) printTitle += ` ${isClassReport ? 'Kelas' : 'Pilihan'} ${filter}`;
                 else printTitle = "Laporan Seluruh Pendaftar Life Skill";
 
                 const handleSingleReportPrint = () => {
-                    if (dataToPrint.length === 0) {
+                    if (dataToDownload.length === 0) {
                         Swal.fire('Informasi', 'Tidak ada data untuk dicetak.', 'info');
                         return;
                     }
-                    printContent(printTitle, tableToHtml(dataToPrint));
+                    printContent(printTitle, tableToHtml(dataToDownload));
                 };
 
                 return (
-                    <div className="bg-white p-6 rounded-lg shadow-md animate-fade-in">
-                        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4 print-hidden">
+                    <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200/80 animate-fade-in space-y-4">
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                             <h2 className="text-2xl font-bold text-slate-800">{reportTitle}</h2>
                             <div className="flex gap-2">
-                                <button onClick={handleSingleReportPrint} className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors text-sm font-medium">Cetak</button>
-                                <button onClick={() => handleDownload(dataToDownload, reportTitle.replace(/\s+/g, '_'))} className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">Unduh Excel</button>
+                                <button onClick={handleSingleReportPrint} className="bg-slate-700 text-white px-4 py-2 rounded-xl hover:bg-slate-800 transition-colors text-xs font-bold">Cetak</button>
+                                <button onClick={() => handleDownload(dataToDownload, reportTitle.replace(/\s+/g, '_'))} className="bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition-colors text-xs font-bold">Unduh Excel</button>
                             </div>
                         </div>
-                        <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4 print-hidden">
-                            <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
-                                <div className="relative w-full sm:w-auto">
-                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-                                        <i className="fa-solid fa-search text-slate-400"></i>
+
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-3">
+                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                                <div className="relative w-full sm:w-60">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                                        <i className="fa-solid fa-search text-xs"></i>
                                     </span>
                                     <input
                                         type="text"
                                         placeholder="Cari siswa..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="border border-slate-300 rounded-md py-2 pl-10 pr-4 w-full sm:w-60 focus:ring-2 focus:ring-indigo-500"
+                                        className="border border-slate-300 rounded-xl py-2 pl-9 pr-3 w-full text-xs focus:ring-2 focus:ring-indigo-500"
                                     />
                                 </div>
                                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                                    <label htmlFor="filter" className="text-sm font-medium text-slate-600 whitespace-nowrap">{filterLabel}:</label>
-                                    <select id="filter" value={filter} onChange={e => setFilter(e.target.value)} className="border border-slate-300 rounded-md px-2 py-2 bg-white w-full focus:ring-2 focus:ring-indigo-500">
+                                    <label htmlFor="filter" className="text-xs font-bold text-slate-600 whitespace-nowrap">{filterLabel}:</label>
+                                    <select id="filter" value={filter} onChange={e => setFilter(e.target.value)} className="border border-slate-300 rounded-xl px-2 py-2 bg-white text-xs w-full focus:ring-2 focus:ring-indigo-500">
                                         <option value="">Semua</option>
                                         {filterOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                     </select>
                                 </div>
                             </div>
-                            <button onClick={openCreateModal} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors w-full md:w-auto flex-shrink-0 font-medium">Tambah Siswa</button>
+                            <button onClick={openCreateModal} className="bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors text-xs font-bold w-full md:w-auto">Tambah Siswa</button>
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full bg-white">
-                                <thead className="bg-slate-100">
+
+                        <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                            <table className="min-w-full bg-white text-xs">
+                                <thead className="bg-slate-100 border-b border-slate-200">
                                     <tr>
-                                        <th className="py-3 px-4 text-center text-sm font-semibold text-slate-600 w-12">No.</th>
-                                        <ThSortable title="Nama" sortKey="fullName" sortConfig={sortConfig} onRequestSort={requestSort} />
+                                        <th className="py-3 px-4 text-center font-bold text-slate-600 w-12">No.</th>
+                                        <ThSortable title="NIS" sortKey="nis" sortConfig={sortConfig} onRequestSort={requestSort} />
+                                        <ThSortable title="Nama Lengkap" sortKey="fullName" sortConfig={sortConfig} onRequestSort={requestSort} />
                                         <ThSortable title="Jenis Kelamin" sortKey="jenisKelamin" sortConfig={sortConfig} onRequestSort={requestSort} />
                                         <ThSortable title="Kelas" sortKey="classLevel" sortConfig={sortConfig} onRequestSort={requestSort} />
-                                        <th className="py-3 px-4 text-left text-sm font-semibold text-slate-600">WhatsApp</th>
+                                        <th className="py-3 px-4 text-left font-bold text-slate-600">WhatsApp</th>
                                         <ThSortable title="Life Skill" sortKey="lifeSkill" sortConfig={sortConfig} onRequestSort={requestSort} />
-                                        <th className="py-3 px-4 text-center text-sm font-semibold text-slate-600 print-hidden">Aksi</th>
+                                        <th className="py-3 px-4 text-center font-bold text-slate-600">Aksi</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="divide-y divide-slate-100">
                                     {filteredAndSortedStudents.map((s, index) => (
-                                        <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50">
-                                            <td className="py-3 px-4 text-center text-slate-500">{index + 1}</td>
-                                            <td className="py-3 px-4">{s.fullName}</td>
-                                            <td className="py-3 px-4 text-center">{s.jenisKelamin}</td>
-                                            <td className="py-3 px-4 text-center">{s.classLevel}</td>
-                                            <td className="py-3 px-4">{s.whatsappNumber}</td>
-                                            <td className="py-3 px-4">
-                                                {s.lifeSkill ? s.lifeSkill : <span className="text-slate-400 italic">Belum Ditentukan</span>}
+                                        <tr key={s.id} className="hover:bg-slate-50">
+                                            <td className="py-2.5 px-4 text-center text-slate-400">{index + 1}</td>
+                                            <td className="py-2.5 px-4 font-mono font-bold text-indigo-700">{s.nis || '-'}</td>
+                                            <td className="py-2.5 px-4 font-bold text-slate-800">{s.fullName}</td>
+                                            <td className="py-2.5 px-4">{s.jenisKelamin}</td>
+                                            <td className="py-2.5 px-4">{s.classLevel}</td>
+                                            <td className="py-2.5 px-4">{s.whatsappNumber || '-'}</td>
+                                            <td className="py-2.5 px-4">
+                                                {s.lifeSkill ? <span className="font-bold text-indigo-700">{s.lifeSkill}</span> : <span className="text-slate-400 italic">Belum Memilih</span>}
                                             </td>
-                                            <td className="py-3 px-4 flex justify-center gap-3 print-hidden">
-                                                <button onClick={() => openEditModal(s)} className="text-blue-600 hover:text-blue-800 transition-colors" aria-label={`Ubah ${s.fullName}`}><i className="fa-solid fa-pencil"></i></button>
-                                                <button onClick={() => handleDeleteStudent(s)} className="text-red-600 hover:text-red-800 transition-colors" aria-label={`Hapus ${s.fullName}`}><i className="fa-solid fa-trash"></i></button>
+                                            <td className="py-2.5 px-4 flex justify-center gap-2">
+                                                <button onClick={() => openEditModal(s)} className="text-blue-600 hover:text-blue-800" title="Edit"><i className="fa-solid fa-pencil"></i></button>
+                                                <button onClick={() => handleDeleteStudent(s)} className="text-rose-600 hover:text-rose-800" title="Hapus"><i className="fa-solid fa-trash"></i></button>
                                             </td>
                                         </tr>
                                     ))}
                                     {filteredAndSortedStudents.length === 0 && (
-                                        <tr><td colSpan={7} className="text-center py-8 text-slate-500">Tidak ada data untuk ditampilkan.</td></tr>
+                                        <tr><td colSpan={8} className="text-center py-8 text-slate-400">Tidak ada data untuk ditampilkan.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -579,6 +985,7 @@ export const AdminPage: React.FC = () => {
                     </div>
                 );
             }
+
             case 'summary': {
                 const summaryByLifeSkill = LIFE_SKILL_OPTIONS.map((ls, index) => {
                     const count = students.filter(s => s.lifeSkill === ls || (s.lifeSkill === 'Tata Busana' && ls === LifeSkill.CLOTHING_LINE)).length;
@@ -597,7 +1004,7 @@ export const AdminPage: React.FC = () => {
                         "Status": status,
                     };
                 });
-                const summaryByClass = CLASS_OPTIONS.map((c, index) => ({ "No.": index + 1, "Kelas": c, "Jumlah Pendaftar": students.filter(s => s.classLevel === c).length }));
+                const summaryByClass = CLASS_OPTIONS.map((c, index) => ({ "No.": index + 1, "Kelas": c, "Jumlah Pendaftar": students.filter(s => s.classLevel === c && s.lifeSkill).length }));
                 
                 const handleDetailedSummaryPrint = () => {
                     if (detailedCountSummary.data.length === 0) {
@@ -612,20 +1019,18 @@ export const AdminPage: React.FC = () => {
                 };
 
                 return (
-                    <div className="space-y-8 animate-fade-in">
-                        <div className="bg-white p-6 rounded-lg shadow-md">
-                             <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-slate-800">Laporan Rekapitulasi</h2>
-                            </div>
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200/80">
+                            <h2 className="text-2xl font-bold text-slate-800 mb-6">Laporan Rekapitulasi</h2>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                 <SummaryTable 
+                                <SummaryTable 
                                     title="Rekap per Pilihan Life Skill" 
                                     data={summaryByLifeSkill} 
                                     onPrint={() => printContent("Rekapitulasi per Pilihan Life Skill", tableToHtml(summaryByLifeSkill, true))}
                                     onDownload={() => handleDownload(summaryByLifeSkill, 'Rekap_Life_Skill')}
                                 />
                                 <SummaryTable 
-                                    title="Rekap per Kelas" 
+                                    title="Rekap per Kelas (Sudah Memilih)" 
                                     data={summaryByClass} 
                                     onPrint={() => printContent("Rekapitulasi per Kelas", tableToHtml(summaryByClass, true))}
                                     onDownload={() => handleDownload(summaryByClass, 'Rekap_Kelas')}
@@ -633,22 +1038,22 @@ export const AdminPage: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-lg shadow-md">
-                            <h2 className="text-xl font-bold text-slate-800 mb-2">Rincian Jumlah Pendaftar</h2>
-                            <p className="text-slate-600 mb-6">Pilih filter untuk melihat rincian jumlah pendaftar secara spesifik.</p>
+                        <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200/80">
+                            <h2 className="text-xl font-bold text-slate-800 mb-2">Rincian Jumlah Pendaftar Spesifik</h2>
+                            <p className="text-xs text-slate-500 mb-4">Pilih filter untuk melihat rincian jumlah pendaftar per program dan kelas.</p>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <div>
-                                    <label htmlFor="summaryLifeSkillFilter" className="block text-sm font-medium text-slate-700 mb-1">Program Life Skill</label>
-                                    <select id="summaryLifeSkillFilter" value={summaryLifeSkillFilter} onChange={e => setSummaryLifeSkillFilter(e.target.value as any)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+                                    <label htmlFor="summaryLifeSkillFilter" className="block text-xs font-bold text-slate-700 mb-1">Program Life Skill</label>
+                                    <select id="summaryLifeSkillFilter" value={summaryLifeSkillFilter} onChange={e => setSummaryLifeSkillFilter(e.target.value as any)} className="w-full px-3 py-2 bg-white text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500">
                                         <option value="">Pilih Life Skill</option>
                                         <option value="SEMUA">Semua Program Life Skill</option>
                                         {LIFE_SKILL_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label htmlFor="summaryClassFilter" className="block text-sm font-medium text-slate-700 mb-1">Kelas</label>
-                                    <select id="summaryClassFilter" value={summaryClassFilter} onChange={e => setSummaryClassFilter(e.target.value as any)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+                                    <label htmlFor="summaryClassFilter" className="block text-xs font-bold text-slate-700 mb-1">Kelas</label>
+                                    <select id="summaryClassFilter" value={summaryClassFilter} onChange={e => setSummaryClassFilter(e.target.value as any)} className="w-full px-3 py-2 bg-white text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500">
                                         <option value="">Pilih Kelas</option>
                                         <option value="SEMUA">Semua Kelas</option>
                                         {CLASS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -657,22 +1062,22 @@ export const AdminPage: React.FC = () => {
                             </div>
 
                             {summaryLifeSkillFilter && summaryClassFilter && (
-                                <div className="animate-fade-in mt-6">
+                                <div className="animate-fade-in mt-4">
                                     {detailedCountSummary.data.length > 0 ? (
                                         <div>
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h3 className="text-lg font-semibold text-slate-700">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <h3 className="text-sm font-bold text-slate-700">
                                                     {detailedCountSummary.title}
                                                 </h3>
                                                 <div className="flex gap-2">
-                                                    <button onClick={handleDetailedSummaryPrint} className="bg-slate-600 text-white px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors text-sm font-medium">Cetak</button>
-                                                    <button onClick={handleDetailedSummaryDownload} className="bg-emerald-600 text-white px-3 py-1.5 rounded-md hover:bg-emerald-700 transition-colors text-sm font-medium">Unduh Excel</button>
+                                                    <button onClick={handleDetailedSummaryPrint} className="bg-slate-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Cetak</button>
+                                                    <button onClick={handleDetailedSummaryDownload} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Unduh Excel</button>
                                                 </div>
                                             </div>
                                             <DynamicSummaryTable summary={detailedCountSummary} />
                                         </div>
                                     ) : (
-                                         <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
+                                        <div className="text-center py-6 text-slate-400 bg-slate-50 rounded-xl text-xs">
                                             Tidak ada data pendaftar yang cocok dengan filter ini.
                                         </div>
                                     )}
@@ -682,24 +1087,25 @@ export const AdminPage: React.FC = () => {
                     </div>
                 );
             }
+
             case 'presensi': {
                 const attendanceStudents = selectedLifeSkillForAttendance 
                     ? students.filter(s => s.lifeSkill === selectedLifeSkillForAttendance)
                     : [];
 
                 return (
-                    <div className="bg-white p-6 rounded-lg shadow-md animate-fade-in">
-                        <h2 className="text-2xl font-bold text-slate-800 mb-2">Cetak Daftar Hadir Peserta</h2>
-                        <p className="text-slate-600 mb-6">Pilih program Life Skill untuk membuat dan mencetak lembar presensi.</p>
+                    <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200/80 animate-fade-in space-y-4">
+                        <h2 className="text-2xl font-bold text-slate-800">Cetak Daftar Hadir Peserta (Presensi)</h2>
+                        <p className="text-xs text-slate-500">Pilih program Life Skill untuk membuat dan mencetak lembar presensi resmi.</p>
 
-                        <div className="flex flex-col sm:flex-row items-end gap-4 p-4 border border-slate-200 bg-slate-50 rounded-lg">
+                        <div className="flex flex-col sm:flex-row items-end gap-3 p-4 border border-slate-200 bg-slate-50 rounded-xl">
                             <div className="w-full sm:w-1/2">
-                                <label htmlFor="attendanceLifeSkill" className="block text-sm font-medium text-slate-700 mb-1">Program Life Skill</label>
+                                <label htmlFor="attendanceLifeSkill" className="block text-xs font-bold text-slate-700 mb-1">Program Life Skill</label>
                                 <select 
                                     id="attendanceLifeSkill" 
                                     value={selectedLifeSkillForAttendance} 
                                     onChange={e => setSelectedLifeSkillForAttendance(e.target.value as LifeSkill)}
-                                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                                    className="w-full px-3 py-2 bg-white text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
                                 >
                                     <option value="" disabled>Pilih Life Skill</option>
                                     {LIFE_SKILL_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -708,45 +1114,48 @@ export const AdminPage: React.FC = () => {
                             <button 
                                 onClick={handlePrintAttendance}
                                 disabled={!selectedLifeSkillForAttendance}
-                                className="w-full sm:w-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 disabled:bg-indigo-400 disabled:cursor-not-allowed"
+                                className="w-full sm:w-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-xl hover:bg-indigo-700 transition-all text-xs disabled:bg-slate-300 disabled:cursor-not-allowed"
                             >
-                                Cetak
+                                <i className="fa-solid fa-print mr-1.5"></i> Cetak Lembar Presensi
                             </button>
                         </div>
 
                         {selectedLifeSkillForAttendance && (
-                             <div className="mt-6">
-                                 <h3 className="text-lg font-semibold text-slate-700 mb-3">
-                                     Daftar Peserta: {selectedLifeSkillForAttendance} ({attendanceStudents.length} orang)
-                                 </h3>
-                                 <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-96">
-                                     <table className="min-w-full bg-white">
-                                         <thead className="bg-slate-100 sticky top-0">
-                                             <tr>
-                                                 <th className="py-2 px-4 text-center text-sm font-semibold text-slate-600 w-12">No.</th>
-                                                 <th className="py-2 px-4 text-left text-sm font-semibold text-slate-600">Nama Lengkap</th>
-                                                 <th className="py-2 px-4 text-center text-sm font-semibold text-slate-600">Kelas</th>
-                                             </tr>
-                                         </thead>
-                                         <tbody>
-                                             {attendanceStudents.map((s, index) => (
-                                                 <tr key={s.id} className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50">
-                                                     <td className="py-2 px-4 text-center text-slate-500">{index + 1}</td>
-                                                     <td className="py-2 px-4">{s.fullName}</td>
-                                                     <td className="py-2 px-4 text-center">{s.classLevel}</td>
-                                                 </tr>
-                                             ))}
-                                             {attendanceStudents.length === 0 && (
-                                                 <tr><td colSpan={3} className="text-center py-8 text-slate-500">Tidak ada peserta.</td></tr>
-                                             )}
-                                         </tbody>
-                                     </table>
-                                 </div>
-                             </div>
+                            <div className="mt-4">
+                                <h3 className="text-sm font-bold text-slate-700 mb-3">
+                                    Daftar Peserta: {selectedLifeSkillForAttendance} ({attendanceStudents.length} siswa)
+                                </h3>
+                                <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-96">
+                                    <table className="min-w-full bg-white text-xs">
+                                        <thead className="bg-slate-100 sticky top-0 border-b border-slate-200">
+                                            <tr>
+                                                <th className="py-2.5 px-4 text-center w-12">No.</th>
+                                                <th className="py-2.5 px-4 text-left">NIS</th>
+                                                <th className="py-2.5 px-4 text-left">Nama Lengkap</th>
+                                                <th className="py-2.5 px-4 text-center">Kelas</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {attendanceStudents.map((s, index) => (
+                                                <tr key={s.id} className="hover:bg-slate-50">
+                                                    <td className="py-2 px-4 text-center text-slate-400">{index + 1}</td>
+                                                    <td className="py-2 px-4 font-mono font-bold text-indigo-700">{s.nis || '-'}</td>
+                                                    <td className="py-2 px-4 font-bold text-slate-800">{s.fullName}</td>
+                                                    <td className="py-2 px-4 text-center">{s.classLevel}</td>
+                                                </tr>
+                                            ))}
+                                            {attendanceStudents.length === 0 && (
+                                                <tr><td colSpan={4} className="text-center py-8 text-slate-400">Tidak ada peserta.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         )}
                     </div>
                 );
             }
+
             default:
                 return null;
         }
@@ -755,10 +1164,12 @@ export const AdminPage: React.FC = () => {
     const changeView = (view: AdminView) => {
         setActiveView(view);
         setFilter('');
+        setStatusFilter('');
         setSearchQuery('');
         setSummaryClassFilter('');
         setSummaryLifeSkillFilter('');
         setSelectedLifeSkillForAttendance('');
+        setSelectedStudentIds([]);
     };
 
     return (
@@ -770,24 +1181,26 @@ export const AdminPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <img src={APP_LOGO} alt="Logo Sekolah" className="h-10 w-10 object-contain" referrerPolicy="no-referrer" />
                         <div>
-                            <h1 className="text-lg font-bold text-white">Admin Panel</h1>
-                            <p className="text-xs text-slate-400">Life Skill MANUSA</p>
+                            <h1 className="text-base font-bold text-white leading-tight">Admin Panel</h1>
+                            <p className="text-[11px] text-slate-400">Life Skill MANUSA</p>
                         </div>
                     </div>
                     <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white" aria-label="Tutup menu"><i className="fa-solid fa-xmark fa-lg"></i></button>
                 </div>
-                <ul className="flex-1 p-2 space-y-1">
+
+                <ul className="flex-1 p-2 space-y-1 overflow-y-auto">
                     <NavItem iconClass="fa-solid fa-grip" text="Dashboard" active={activeView === 'dashboard'} onClick={() => changeView('dashboard')} />
+                    <NavItem iconClass="fa-solid fa-users-gear" text="Master Data & Import" active={activeView === 'master-data'} onClick={() => changeView('master-data')} />
                     <NavItem iconClass="fa-solid fa-users" text="Laporan per Kelas" active={activeView === 'report-class'} onClick={() => changeView('report-class')} />
                     <NavItem iconClass="fa-solid fa-award" text="Laporan Life Skill" active={activeView === 'report-lifeskill'} onClick={() => changeView('report-lifeskill')} />
                     <NavItem iconClass="fa-solid fa-table-list" text="Laporan Rekap" active={activeView === 'summary'} onClick={() => changeView('summary')} />
                     <NavItem iconClass="fa-solid fa-clipboard-user" text="Presensi" active={activeView === 'presensi'} onClick={() => changeView('presensi')} />
                     
-                    <div className="pt-4 px-2 space-y-2">
+                    <div className="pt-4 px-2 space-y-2 border-t border-slate-800">
                         <button
                             type="button"
                             onClick={handleRefreshData}
-                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
                             title="Muat Ulang / Sinkronkan Data dari Database Server"
                         >
                             <i className="fa-solid fa-arrows-rotate text-emerald-400"></i>
@@ -797,8 +1210,8 @@ export const AdminPage: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleClearAllData}
-                            className="w-full bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border border-slate-700 hover:border-rose-800 transition"
-                            title="Kosongkan Semua Data Pendaftar"
+                            className="w-full bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 hover:border-rose-800 transition"
+                            title="Kosongkan Semua Data Master Siswa"
                         >
                             <i className="fa-solid fa-trash-can text-rose-400"></i>
                             <span>Kosongkan Semua Data</span>
@@ -807,7 +1220,7 @@ export const AdminPage: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleChangePassword}
-                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
                             title="Ganti Username atau Password Administrator"
                         >
                             <i className="fa-solid fa-key text-amber-400"></i>
@@ -815,6 +1228,7 @@ export const AdminPage: React.FC = () => {
                         </button>
                     </div>
                 </ul>
+
                 <div className="p-2 border-t border-slate-700/50">
                     <NavItem iconClass="fa-solid fa-arrow-right-from-bracket" text="Logout" onClick={handleLogout} />
                 </div>
@@ -824,7 +1238,7 @@ export const AdminPage: React.FC = () => {
                 <header className="sticky top-0 bg-slate-100/80 backdrop-blur-sm z-10 p-2 flex items-center justify-between lg:hidden print-hidden shadow-sm">
                     <div className="flex items-center gap-2">
                         <img src={APP_LOGO} alt="Logo Sekolah" className="h-8 w-8 ml-2 object-contain" referrerPolicy="no-referrer" />
-                        <span className="font-bold text-slate-700 text-lg">Admin Panel</span>
+                        <span className="font-bold text-slate-700 text-base">Admin Panel</span>
                     </div>
                     <button onClick={() => setSidebarOpen(true)} className="p-2 mr-2 text-slate-600 hover:text-indigo-600" aria-label="Buka menu"><i className="fa-solid fa-bars fa-lg"></i></button>
                 </header>
@@ -834,7 +1248,14 @@ export const AdminPage: React.FC = () => {
                 </main>
             </div>
 
+            {/* Modals */}
             <StudentModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveStudent} studentToEdit={studentToEdit} />
+            <BulkImportModal
+                isOpen={isBulkImportOpen}
+                onClose={() => setBulkImportOpen(false)}
+                onBulkImport={bulkImportStudents}
+                onImportSuccess={() => fetchStudents()}
+            />
         </div>
     );
 };
@@ -850,8 +1271,8 @@ const ThSortable: React.FC<{
     const icon = isActive ? (sortConfig?.direction === 'ascending' ? '▲' : '▼') : '↕';
 
     return (
-        <th className={`py-3 px-4 text-left text-sm font-semibold text-slate-600 ${className}`}>
-            <button onClick={() => onRequestSort(sortKey)} className="group inline-flex items-center gap-2 focus:outline-none">
+        <th className={`py-3 px-3 text-left text-xs font-bold text-slate-600 ${className}`}>
+            <button onClick={() => onRequestSort(sortKey)} className="group inline-flex items-center gap-1.5 focus:outline-none">
                 <span>{title}</span>
                 <span className={`transition-opacity ${isActive ? 'opacity-100 text-indigo-600' : 'opacity-30 text-slate-400 group-hover:opacity-100'}`}>
                     {icon}
@@ -861,11 +1282,11 @@ const ThSortable: React.FC<{
     );
 };
 
-const NavItem = ({ iconClass, text, active = false, onClick }: {iconClass: string; text: string; active?: boolean; onClick: () => void;}) => (
+const NavItem = ({ iconClass, text, active = false, onClick }: { iconClass: string; text: string; active?: boolean; onClick: () => void; }) => (
     <li>
-        <button onClick={onClick} className={`flex items-center w-full p-3 my-1 rounded-lg transition-colors duration-200 ${active ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-slate-700/50'}`}>
-            <i className={`${iconClass} fa-fw w-5 text-center mr-3 flex-shrink-0`}></i>
-            <span className="font-medium">{text}</span>
+        <button onClick={onClick} className={`flex items-center w-full p-2.5 my-0.5 rounded-xl transition-all duration-200 text-xs ${active ? 'bg-indigo-600 text-white font-bold shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'}`}>
+            <i className={`${iconClass} fa-fw w-5 text-center mr-2.5 flex-shrink-0`}></i>
+            <span className="truncate">{text}</span>
         </button>
     </li>
 );
@@ -875,7 +1296,7 @@ const SummaryTable: React.FC<{
     data: any[];
     onPrint: () => void;
     onDownload: () => void;
-}> = ({title, data, onPrint, onDownload}) => {
+}> = ({ title, data, onPrint, onDownload }) => {
     const headers = data.length > 0 ? Object.keys(data[0]) : [];
     const hasQuota = headers.includes('Kuota');
     const totalPendaftar = data.reduce((sum, item) => sum + (item['Jumlah Pendaftar'] || 0), 0);
@@ -883,36 +1304,36 @@ const SummaryTable: React.FC<{
     const totalSisa = data.reduce((sum, item) => sum + (item['Sisa Kuota'] || 0), 0);
     const overallPercent = totalKuota > 0 ? ((totalPendaftar / totalKuota) * 100).toFixed(1) + '%' : '0%';
 
-    return(
+    return (
         <div>
             <div className="flex justify-between items-center mb-3">
-                <h3 className="text-lg font-semibold text-slate-700">{title}</h3>
+                <h3 className="text-sm font-bold text-slate-700">{title}</h3>
                 <div className="flex gap-2 print-hidden">
-                    <button onClick={onPrint} className="bg-slate-600 text-white px-3 py-1 text-sm rounded-md hover:bg-slate-700 transition-colors">Cetak</button>
-                    <button onClick={() => onDownload()} className="bg-emerald-600 text-white px-3 py-1 text-sm rounded-md hover:bg-emerald-700 transition-colors">Unduh Excel</button>
+                    <button onClick={onPrint} className="bg-slate-700 text-white px-3 py-1 text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors">Cetak</button>
+                    <button onClick={() => onDownload()} className="bg-emerald-600 text-white px-3 py-1 text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors">Unduh Excel</button>
                 </div>
             </div>
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                <table className="min-w-full bg-white">
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="min-w-full bg-white text-xs">
                     <thead className="bg-slate-100">
                         <tr>
                             {headers.map(header => (
-                                <th key={header} className={`py-2 px-4 font-semibold text-sm text-slate-600 ${typeof data[0]?.[header] === 'number' || header.includes('Persentase') || header === 'Status' ? 'text-center' : 'text-left'}`}>
+                                <th key={header} className={`py-2 px-3 font-bold text-slate-600 ${typeof data[0]?.[header] === 'number' || header.includes('Persentase') || header === 'Status' ? 'text-center' : 'text-left'}`}>
                                     {header}
                                 </th>
                             ))}
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100">
                         {data.map((item, index) => (
-                            <tr key={index} className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50">
+                            <tr key={index} className="hover:bg-slate-50">
                                 {headers.map(header => {
                                     const val = item[header];
                                     const isStatus = header === 'Status';
                                     return (
-                                        <td key={header} className={`py-2 px-4 ${typeof val === 'number' || header.includes('Persentase') || isStatus ? 'text-center' : 'text-left'}`}>
+                                        <td key={header} className={`py-2 px-3 ${typeof val === 'number' || header.includes('Persentase') || isStatus ? 'text-center' : 'text-left'}`}>
                                             {isStatus ? (
-                                                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${val === 'Penuh' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${val === 'Penuh' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                                     {val}
                                                 </span>
                                             ) : (
@@ -925,25 +1346,25 @@ const SummaryTable: React.FC<{
                         ))}
                         {data.length === 0 && (
                            <tr>
-                               <td colSpan={headers.length || 3} className="text-center py-6 text-slate-500">Tidak ada data untuk ditampilkan.</td>
+                               <td colSpan={headers.length || 3} className="text-center py-6 text-slate-400">Tidak ada data untuk ditampilkan.</td>
                            </tr>
                         )}
                     </tbody>
-                     {data.length > 0 && (
+                    {data.length > 0 && (
                         <tfoot className="bg-slate-100 font-bold text-slate-800">
                             {hasQuota ? (
                                 <tr>
-                                    <td className="py-2 px-4 text-left" colSpan={2}>Total</td>
-                                    <td className="py-2 px-4 text-center">{totalPendaftar}</td>
-                                    <td className="py-2 px-4 text-center">{totalKuota}</td>
-                                    <td className="py-2 px-4 text-center">{totalSisa}</td>
-                                    <td className="py-2 px-4 text-center">{overallPercent}</td>
-                                    <td className="py-2 px-4 text-center"></td>
+                                    <td className="py-2 px-3 text-left" colSpan={2}>Total</td>
+                                    <td className="py-2 px-3 text-center">{totalPendaftar}</td>
+                                    <td className="py-2 px-3 text-center">{totalKuota}</td>
+                                    <td className="py-2 px-3 text-center">{totalSisa}</td>
+                                    <td className="py-2 px-3 text-center">{overallPercent}</td>
+                                    <td className="py-2 px-3 text-center"></td>
                                 </tr>
                             ) : (
                                 <tr>
-                                    <td className="py-2 px-4 text-left" colSpan={headers.length - 1}>Total</td>
-                                    <td className="py-2 px-4 text-center">{totalPendaftar}</td>
+                                    <td className="py-2 px-3 text-left" colSpan={headers.length - 1}>Total</td>
+                                    <td className="py-2 px-3 text-center">{totalPendaftar}</td>
                                 </tr>
                             )}
                         </tfoot>
@@ -952,7 +1373,7 @@ const SummaryTable: React.FC<{
             </div>
         </div>
     );
-}
+};
 
 const DynamicSummaryTable: React.FC<{
     summary: { data: any[], headers: string[] }
@@ -961,20 +1382,20 @@ const DynamicSummaryTable: React.FC<{
     const total = data.reduce((sum, item) => sum + (item['Jumlah Pendaftar'] || 0), 0);
 
     return (
-        <div className="overflow-x-auto border border-slate-200 rounded-lg">
-            <table className="min-w-full bg-white">
-                <thead className="bg-slate-100">
+        <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="min-w-full bg-white text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200">
                     <tr>
                         {headers.map(header => (
-                            <th key={header} className={`py-2 px-4 text-left font-semibold text-sm text-slate-600 ${header.includes('Jumlah') ? 'text-center' : 'text-left'}`}>{header}</th>
+                            <th key={header} className={`py-2 px-3 font-bold text-slate-600 ${header.includes('Jumlah') ? 'text-center' : 'text-left'}`}>{header}</th>
                         ))}
                     </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                     {data.map((item, index) => (
-                        <tr key={index} className="border-b border-slate-200 last:border-b-0">
+                        <tr key={index} className="hover:bg-slate-50">
                             {headers.map(header => (
-                                <td key={header} className={`py-2 px-4 ${header.includes('Jumlah') ? 'text-center' : 'text-left'}`}>{item[header]}</td>
+                                <td key={header} className={`py-2 px-3 ${header.includes('Jumlah') ? 'text-center' : 'text-left'}`}>{item[header]}</td>
                             ))}
                         </tr>
                     ))}
@@ -982,8 +1403,8 @@ const DynamicSummaryTable: React.FC<{
                 {data.length > 0 && headers.length > 1 && (
                     <tfoot className="bg-slate-100 font-bold text-slate-800">
                         <tr>
-                            <td className="py-2 px-4 text-left" colSpan={headers.length - 1}>Total</td>
-                            <td className="py-2 px-4 text-center">{total}</td>
+                            <td className="py-2 px-3 text-left" colSpan={headers.length - 1}>Total</td>
+                            <td className="py-2 px-3 text-center">{total}</td>
                         </tr>
                     </tfoot>
                 )}
@@ -992,47 +1413,54 @@ const DynamicSummaryTable: React.FC<{
     );
 };
 
-const StatCard: React.FC<{title: string, value: string | number, color: string, subValue?: string}> = ({title, value, color, subValue}) => (
-    <div className={`bg-white p-6 rounded-lg shadow-md border-l-4 ${color}`}>
-        <h3 className="text-base font-medium text-slate-500">{title}</h3>
-        <p className="text-3xl font-bold text-slate-800 mt-2">{value}</p>
+const StatCard: React.FC<{ title: string; value: string | number; color: string; subValue?: string; icon?: string }> = ({ title, value, color, subValue, icon }) => (
+    <div className={`bg-white p-5 rounded-2xl shadow-sm border-l-4 ${color} border-slate-200/80`}>
+        <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{title}</h3>
+            {icon && <i className={`${icon} text-slate-400 text-sm`}></i>}
+        </div>
+        <p className="text-2xl sm:text-3xl font-extrabold text-slate-800 mt-2">{value}</p>
         {subValue && <p className="text-xs text-slate-500 mt-1">{subValue}</p>}
     </div>
-)
+);
 
-const DashboardView: React.FC<{students: Student[]; isLoading: boolean}> = ({ students, isLoading }) => {
-    const totalStudents = students.length;
+const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenImport: () => void }> = ({ students, isLoading, onOpenImport }) => {
+    const totalMasterStudents = students.length;
+    const registeredStudents = students.filter(s => s.lifeSkill && s.lifeSkill.trim() !== '');
+    const unregisteredStudents = students.filter(s => !s.lifeSkill || s.lifeSkill.trim() === '');
+    
+    const totalSelected = registeredStudents.length;
     const totalCapacity = 285;
-    const totalRemaining = Math.max(0, totalCapacity - totalStudents);
-    const totalMale = students.filter(s => s.jenisKelamin === 'Laki-laki').length;
-    const totalFemale = students.filter(s => s.jenisKelamin === 'Perempuan').length;
+    const totalRemaining = Math.max(0, totalCapacity - totalSelected);
+    const totalMale = registeredStudents.filter(s => s.jenisKelamin === 'Laki-laki').length;
+    const totalFemale = registeredStudents.filter(s => s.jenisKelamin === 'Perempuan').length;
 
     const dataByLifeSkill = useMemo(() => {
         return LIFE_SKILL_OPTIONS.map(skill => {
-            const count = students.filter(s => s.lifeSkill === skill || (s.lifeSkill === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
+            const count = registeredStudents.filter(s => s.lifeSkill === skill || (s.lifeSkill === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
             return {
                 name: skill,
                 value: count,
                 quota: LIFE_SKILL_QUOTAS[skill]
             };
         });
-    }, [students]);
+    }, [registeredStudents]);
 
     const dataByClass = useMemo(() => {
         return CLASS_OPTIONS.map(c => ({
             name: c,
-            pendaftar: students.filter(s => s.classLevel === c).length
+            pendaftar: registeredStudents.filter(s => s.classLevel === c).length,
+            totalMaster: students.filter(s => s.classLevel === c).length,
         }));
-    }, [students]);
+    }, [registeredStudents, students]);
 
-    const PIE_COLORS = ['#3b82f6', '#14b8a6', '#f97316', '#84cc16', '#6366f1', '#db2777'];
+    const PIE_COLORS = ['#6366f1', '#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#f43f5e'];
 
     if (isLoading) {
         return (
             <div className="flex justify-center items-center h-full">
                 <div className="text-center">
-                    <h2 className="text-3xl font-bold text-slate-800 mb-6">Dashboard</h2>
-                    <p className="text-lg font-medium text-slate-600">Memuat data dashboard...</p>
+                    <p className="text-base font-semibold text-slate-600">Memuat data dashboard...</p>
                 </div>
             </div>
         );
@@ -1040,73 +1468,90 @@ const DashboardView: React.FC<{students: Student[]; isLoading: boolean}> = ({ st
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                <h2 className="text-3xl font-bold text-slate-800">Dashboard</h2>
-                <div className="text-sm font-medium text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                    Kapasitas Pendaftaran: <span className="font-bold text-indigo-600">{totalStudents}</span> / {totalCapacity} Siswa ({((totalStudents / totalCapacity) * 100).toFixed(1)}%)
+            {/* Header & Quick Action */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Dashboard & Monitoring</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Pemantauan pengisian kuota Life Skill dan status pemilihan siswa.</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={onOpenImport}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                    >
+                        <i className="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Upload Excel Siswa</span>
+                    </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Top 4 Stat Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard 
-                    title="Total Pendaftar" 
-                    value={`${totalStudents} / ${totalCapacity}`} 
-                    subValue={`Terisi ${((totalStudents / totalCapacity) * 100).toFixed(1)}%`}
-                    color="border-indigo-500" 
+                    title="Total Master Siswa" 
+                    value={totalMasterStudents} 
+                    subValue={`${unregisteredStudents.length} siswa belum memilih`}
+                    color="border-indigo-600"
+                    icon="fa-solid fa-users"
                 />
                 <StatCard 
-                    title="Sisa Kuota Total" 
-                    value={`${totalRemaining} Kursi`} 
-                    subValue="Dari total 6 program"
+                    title="Siswa Sudah Memilih" 
+                    value={`${totalSelected} / ${totalCapacity}`} 
+                    subValue={`Terisi ${((totalSelected / (totalCapacity || 1)) * 100).toFixed(1)}%`}
                     color="border-emerald-500" 
+                    icon="fa-solid fa-circle-check"
                 />
                 <StatCard 
-                    title="Total Laki-laki" 
-                    value={totalMale} 
-                    subValue={`${totalStudents > 0 ? ((totalMale / totalStudents) * 100).toFixed(1) : 0}% pendaftar`}
+                    title="Sisa Kuota Tersedia" 
+                    value={`${totalRemaining} Kursi`} 
+                    subValue="Dari total 6 program pilihan"
+                    color="border-amber-500" 
+                    icon="fa-solid fa-chair"
+                />
+                <StatCard 
+                    title="Gender Pendaftar" 
+                    value={`${totalMale} L / ${totalFemale} P`} 
+                    subValue="Laki-laki & Perempuan"
                     color="border-blue-500" 
-                />
-                <StatCard 
-                    title="Total Perempuan" 
-                    value={totalFemale} 
-                    subValue={`${totalStudents > 0 ? ((totalFemale / totalStudents) * 100).toFixed(1) : 0}% pendaftar`}
-                    color="border-pink-500" 
+                    icon="fa-solid fa-venus-mars"
                 />
             </div>
 
-            {/* Quota Fulfillment Breakdown */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
+            {/* Quota Cards */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h3 className="text-xl font-semibold text-slate-800">Status Pemenuhan Kuota Life Skill</h3>
-                        <p className="text-sm text-slate-500">Monitoring pengisian kuota untuk setiap program keterampilan</p>
+                        <h3 className="text-lg font-bold text-slate-800">Status Kuota 6 Program Life Skill</h3>
+                        <p className="text-xs text-slate-500">Live monitoring kapasitas tiap kelas keterampilan</p>
                     </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {LIFE_SKILL_OPTIONS.map((skill, index) => {
-                        const count = students.filter(s => s.lifeSkill === skill || (s.lifeSkill === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {LIFE_SKILL_OPTIONS.map((skill) => {
+                        const count = registeredStudents.filter(s => s.lifeSkill === skill || (s.lifeSkill === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
                         const quota = LIFE_SKILL_QUOTAS[skill];
                         const remaining = Math.max(0, quota - count);
                         const percentage = Math.min(100, quota > 0 ? (count / quota) * 100 : 0);
                         const isFull = count >= quota;
 
                         return (
-                            <div key={skill} className="p-4 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:shadow-sm transition-all">
+                            <div key={skill} className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:shadow-xs transition-all">
                                 <div className="flex justify-between items-start mb-2">
-                                    <span className="font-semibold text-slate-800 text-sm">{skill}</span>
-                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${isFull ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                    <span className="font-bold text-slate-800 text-xs">{skill}</span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isFull ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                         {isFull ? 'PENUH' : `Sisa ${remaining}`}
                                     </span>
                                 </div>
-                                <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden mb-2">
+                                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden mb-2">
                                     <div 
-                                        className={`h-2.5 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : percentage > 75 ? 'bg-amber-500' : 'bg-indigo-600'}`}
+                                        className={`h-2 rounded-full transition-all duration-500 ${isFull ? 'bg-rose-500' : percentage > 75 ? 'bg-amber-500' : 'bg-indigo-600'}`}
                                         style={{ width: `${percentage}%` }}
                                     ></div>
                                 </div>
-                                <div className="flex justify-between text-xs text-slate-600 font-medium">
+                                <div className="flex justify-between text-[11px] text-slate-600 font-medium">
                                     <span>{count} / {quota} Siswa</span>
-                                    <span>{percentage.toFixed(1)}%</span>
+                                    <span className="font-bold text-slate-700">{percentage.toFixed(1)}%</span>
                                 </div>
                             </div>
                         );
@@ -1114,22 +1559,23 @@ const DashboardView: React.FC<{students: Student[]; isLoading: boolean}> = ({ st
                 </div>
             </div>
 
+            {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div className="lg:col-span-3 bg-white p-6 rounded-lg shadow-md">
-                    <h3 className="text-xl font-semibold mb-4 text-slate-700">Pendaftar per Kelas</h3>
-                    <ResponsiveContainer width="100%" height={300}>
+                <div className="lg:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                    <h3 className="text-base font-bold mb-4 text-slate-800">Partisipasi Pendaftar per Kelas</h3>
+                    <ResponsiveContainer width="100%" height={280}>
                         <BarChart data={dataByClass} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <XAxis dataKey="name" fontSize={12} tick={{ fill: '#475569' }} />
-                            <YAxis allowDecimals={false} fontSize={12} tick={{ fill: '#475569' }} />
-                            <Tooltip wrapperClassName="!border-slate-300 !bg-white/80 !backdrop-blur-sm !rounded-lg" cursor={{ fill: 'rgba(79, 70, 229, 0.1)' }}/>
-                            <Legend wrapperStyle={{ fontSize: '14px' }} />
-                            <Bar dataKey="pendaftar" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                            <XAxis dataKey="name" fontSize={11} tick={{ fill: '#475569' }} />
+                            <YAxis allowDecimals={false} fontSize={11} tick={{ fill: '#475569' }} />
+                            <Tooltip wrapperClassName="!border-slate-300 !bg-white/90 !backdrop-blur-sm !rounded-xl !text-xs" cursor={{ fill: 'rgba(79, 70, 229, 0.08)' }}/>
+                            <Legend wrapperStyle={{ fontSize: '12px' }} />
+                            <Bar dataKey="pendaftar" name="Sudah Memilih" fill="#4f46e5" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
-                <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
-                     <h3 className="text-xl font-semibold mb-4 text-slate-700">Distribusi Pilihan Life Skill</h3>
-                    <ResponsiveContainer width="100%" height={300}>
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                    <h3 className="text-base font-bold mb-4 text-slate-800">Distribusi Pilihan Life Skill</h3>
+                    <ResponsiveContainer width="100%" height={280}>
                         <PieChart>
                             <Pie 
                                 data={dataByLifeSkill.filter(d => d.value > 0)} 
@@ -1137,19 +1583,19 @@ const DashboardView: React.FC<{students: Student[]; isLoading: boolean}> = ({ st
                                 nameKey="name" 
                                 cx="50%" 
                                 cy="50%" 
-                                outerRadius={100} 
+                                outerRadius={90} 
                                 labelLine={false} 
                                 label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
                                     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
                                     const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
                                     const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
-                                    return (percent > 0.05) ? <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold">{(percent * 100).toFixed(0)}%</text> : null;
+                                    return (percent > 0.05) ? <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight="bold">{(percent * 100).toFixed(0)}%</text> : null;
                                 }}
                             >
                                 {dataByLifeSkill.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="white" strokeWidth={2} />)}
                             </Pie>
-                            <Tooltip wrapperClassName="!border-slate-300 !bg-white/80 !backdrop-blur-sm !rounded-lg" />
-                            <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '20px' }} />
+                            <Tooltip wrapperClassName="!border-slate-300 !bg-white/90 !backdrop-blur-sm !rounded-xl !text-xs" />
+                            <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '15px' }} />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
