@@ -1,6 +1,5 @@
 services:
   lifeskill-app:
-    image: lifeskill-app:latest
     build:
       context: .
       dockerfile: Dockerfile
