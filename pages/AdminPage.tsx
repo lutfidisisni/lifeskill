@@ -51,7 +51,6 @@ export const AdminPage: React.FC = () => {
             title: 'Ganti Akun & Password Admin',
             html: `
                 <div style="text-align: left; font-size: 13px;" class="space-y-3">
-                    <p style="color: #64748b; margin-bottom: 12px;">Akun default saat ini adalah <b>admin</b> / <b>admin123</b>.</p>
                     <div style="margin-bottom: 10px;">
                         <label style="font-weight: 600; color: #334155; display: block; margin-bottom: 4px;">Password Saat Ini (Wajib):</label>
                         <input id="swal-current-pass" type="password" class="swal2-input" style="margin: 0; width: 100%; font-size: 14px; box-sizing: border-box;" placeholder="Password saat ini" />

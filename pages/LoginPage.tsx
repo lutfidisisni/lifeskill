@@ -62,14 +62,6 @@ export const LoginPage: React.FC = () => {
             }
 
         } catch (error: any) {
-            // Fallback for standalone preview / offline environment when default admin credentials are used
-            if ((cleanUsername === 'admin' && cleanPassword === 'admin123') && (error.name === 'TypeError' || error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('Endpoint API'))) {
-                console.warn('Backend server unreachable, logging into local admin session.');
-                sessionStorage.setItem('token', 'local-admin-session-token');
-                navigate('/admin');
-                return;
-            }
-
             Swal.fire({
                 icon: 'error',
                 title: 'Login Gagal',
@@ -138,15 +130,6 @@ export const LoginPage: React.FC = () => {
                              {loading ? 'Memproses...' : 'Login ke Panel Admin'}
                         </button>
                     </form>
-
-                    <div className="mt-6 pt-4 border-t border-slate-100 text-center">
-                        <p className="text-xs text-slate-500 font-medium">
-                            Akun default pertama kali: <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded font-bold">admin</span> / <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded font-bold">admin123</span>
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                            Password & username dapat diubah di menu Admin setelah login.
-                        </p>
-                    </div>
                 </div>
             </div>
         </div>
