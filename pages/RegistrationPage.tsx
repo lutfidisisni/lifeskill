@@ -287,10 +287,6 @@ export const RegistrationPage: React.FC = () => {
                             <td class="value">: ${verifiedStudent.classLevel}</td>
                         </tr>
                         <tr>
-                            <td class="label">Nomor WhatsApp</td>
-                            <td class="value">: ${verifiedStudent.whatsappNumber || '-'}</td>
-                        </tr>
-                        <tr>
                             <td class="label">Program Pilihan</td>
                             <td class="value">: <span class="program-badge">${verifiedStudent.lifeSkill}</span></td>
                         </tr>
