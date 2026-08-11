@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  lifeskill-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lifeskill_app
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - lifeskill_data:/app/data
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=super_secret_jwt_key_lifeskill_2026
+
+volumes:
+  lifeskill_data:

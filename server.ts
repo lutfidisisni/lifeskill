@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { DatabaseSync } from 'node:sqlite';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
 
 const app = express();
 const PORT = 3000;
@@ -14,7 +15,10 @@ app.use(cors());
 app.use(express.json());
 
 // --- Database Setup ---
-const db = new DatabaseSync('./lifeskill.sqlite');
+if (!fs.existsSync('./data')) {
+    fs.mkdirSync('./data', { recursive: true });
+}
+const db = new DatabaseSync('./data/lifeskill.sqlite');
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS admins (
