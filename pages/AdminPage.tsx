@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
-import { LifeSkill, type Student, type ClassLevel } from '../types';
+import { LifeSkill, type Student, type ClassLevel, type SkillSetting } from '../types';
 import { CLASS_OPTIONS, LIFE_SKILL_OPTIONS, APP_LOGO, API_BASE_URL } from '../constants';
 import { StudentModal } from '../components/StudentModal';
 import { BulkImportModal } from '../components/BulkImportModal';
@@ -10,8 +10,53 @@ import { useStudents } from '../hooks/useStudents';
 declare const Swal: any;
 declare const XLSX: any;
 
-type AdminView = 'dashboard' | 'master-data' | 'report-class' | 'report-lifeskill' | 'summary' | 'presensi';
+type AdminView = 'dashboard' | 'master-data' | 'skill-settings' | 'report-class' | 'report-lifeskill' | 'summary' | 'presensi';
 type SortConfig = { key: keyof Student; direction: 'ascending' | 'descending' } | null;
+
+const SKILL_ICONS: Record<string, { icon: string; bg: string; text: string; border: string; desc: string }> = {
+    'Desain Grafis': {
+        icon: 'fa-palette',
+        bg: 'bg-indigo-50',
+        text: 'text-indigo-600',
+        border: 'border-indigo-200',
+        desc: 'Desain visual, editing foto & video, pembuatan konten kreatif digital'
+    },
+    'Otomotif': {
+        icon: 'fa-wrench',
+        bg: 'bg-blue-50',
+        text: 'text-blue-600',
+        border: 'border-blue-200',
+        desc: 'Perawatan mesin motor, kelistrikan kendaraan & servis berkala'
+    },
+    'Tata Boga': {
+        icon: 'fa-utensils',
+        bg: 'bg-amber-50',
+        text: 'text-amber-600',
+        border: 'border-amber-200',
+        desc: 'Pengolahan makanan, bakery, pastry & kewirausahaan kuliner modern'
+    },
+    'Clothing Line': {
+        icon: 'fa-shirt',
+        bg: 'bg-purple-50',
+        text: 'text-purple-600',
+        border: 'border-purple-200',
+        desc: 'Pola busana, teknik menjahit, sablon kaos & produksi apparel distro'
+    },
+    'Setir Mobil': {
+        icon: 'fa-car',
+        bg: 'bg-emerald-50',
+        text: 'text-emerald-600',
+        border: 'border-emerald-200',
+        desc: 'Praktik mengemudi mobil aman, rambu lalu lintas & pemeliharaan armada'
+    },
+    'Tata Rias': {
+        icon: 'fa-wand-magic-sparkles',
+        bg: 'bg-rose-50',
+        text: 'text-rose-600',
+        border: 'border-rose-200',
+        desc: 'Rias wajah natural/pengantin, hair styling & perawatan kecantikan'
+    },
+};
 
 export const AdminPage: React.FC = () => {
     const [activeView, setActiveView] = useState<AdminView>('dashboard');
@@ -32,6 +77,7 @@ export const AdminPage: React.FC = () => {
 
     const {
         students,
+        skillSettings,
         loading,
         error,
         addStudent,
@@ -41,7 +87,10 @@ export const AdminPage: React.FC = () => {
         resetStudentChoices,
         bulkImportStudents,
         fetchStudents,
-        clearAllStudents
+        clearAllStudents,
+        updateSkillSetting,
+        updateAllSkillSettings,
+        fetchSkillSettings
     } = useStudents();
 
     const navigate = useNavigate();
@@ -131,6 +180,112 @@ export const AdminPage: React.FC = () => {
             timer: 1500,
             showConfirmButton: false
         });
+    };
+
+    const handleToggleSkillDisabled = async (skill: LifeSkill, currentDisabled: boolean, currentReason: string = '') => {
+        const nextDisabled = !currentDisabled;
+        
+        if (nextDisabled) {
+            // When closing / setting quota full, prompt or allow setting a reason
+            const { value: reason, isConfirmed } = await Swal.fire({
+                title: `Tutup Pilihan: ${skill}`,
+                html: `
+                    <div style="text-align: left; font-size: 13px; color: #334155;">
+                        <p style="margin-bottom: 10px;">
+                            Pilihan <b>"${skill}"</b> akan <b>dinonaktifkan</b> sehingga murid baru tidak dapat memilih program ini di formulir pendaftaran.
+                        </p>
+                        <label style="font-weight: 600; display: block; margin-bottom: 4px;">Keterangan / Alasan Penutupan (Opsional):</label>
+                        <input id="swal-skill-reason" class="swal2-input" style="width: 100%; margin: 0; box-sizing: border-box; font-size: 13px;" placeholder="Contoh: Kuota Penuh (50 Siswa) / Kelas Terisi" value="${currentReason || 'Kuota Penuh'}" />
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Tutup Program',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                preConfirm: () => {
+                    return (document.getElementById('swal-skill-reason') as HTMLInputElement)?.value || '';
+                }
+            });
+
+            if (!isConfirmed) return;
+
+            await updateSkillSetting(skill, true, reason);
+            Swal.fire({
+                icon: 'success',
+                title: 'Program Ditutup',
+                text: `Pendaftaran "${skill}" berhasil ditutup. Murid tidak dapat memilih program ini lagi.`,
+                timer: 1500,
+                showConfirmButton: false
+            });
+        } else {
+            // Re-open
+            await updateSkillSetting(skill, false, '');
+            Swal.fire({
+                icon: 'success',
+                title: 'Program Dibuka Kembali',
+                text: `Pendaftaran "${skill}" sekarang aktif dan dapat dipilih kembali oleh murid.`,
+                timer: 1500,
+                showConfirmButton: false
+            });
+        }
+    };
+
+    const handleEditSkillReason = async (skill: LifeSkill, currentReason: string) => {
+        const { value: newReason, isConfirmed } = await Swal.fire({
+            title: `Ubah Keterangan: ${skill}`,
+            input: 'text',
+            inputLabel: 'Keterangan / Alasan Penutupan:',
+            inputValue: currentReason || '',
+            inputPlaceholder: 'Contoh: Kuota Penuh / Kelas Terpenuhi',
+            showCancelButton: true,
+            confirmButtonText: 'Simpan',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#4f46e5',
+            cancelButtonColor: '#64748b',
+        });
+
+        if (isConfirmed && newReason !== undefined) {
+            await updateSkillSetting(skill, true, newReason.trim());
+            Swal.fire({
+                icon: 'success',
+                title: 'Keterangan Diperbarui',
+                timer: 1200,
+                showConfirmButton: false
+            });
+        }
+    };
+
+    const handleBatchSetSkillStatus = async (disabled: boolean) => {
+        const actionLabel = disabled ? 'Menutup Semua Program' : 'Membuka Semua Program';
+        const confirmResult = await Swal.fire({
+            title: `${actionLabel}?`,
+            text: disabled 
+                ? 'Semua 6 pilihan Life Skill akan dinonaktifkan sehingga murid tidak dapat memilih program apapun.'
+                : 'Semua 6 pilihan Life Skill akan diaktifkan kembali sehingga murid dapat memilih bebas.',
+            icon: disabled ? 'warning' : 'question',
+            showCancelButton: true,
+            confirmButtonText: disabled ? 'Ya, Tutup Semua' : 'Ya, Buka Semua',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: disabled ? '#ef4444' : '#10b981',
+            cancelButtonColor: '#64748b'
+        });
+
+        if (confirmResult.isConfirmed) {
+            const updated = LIFE_SKILL_OPTIONS.map(skill => ({
+                skill,
+                disabled,
+                reason: disabled ? 'Kuota Penuh / Ditutup oleh Admin' : ''
+            }));
+            await updateAllSkillSettings(updated);
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil!',
+                text: disabled ? 'Semua program Life Skill berhasil ditutup.' : 'Semua program Life Skill sekarang aktif.',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        }
     };
 
     const handleClearAllData = () => {
@@ -603,7 +758,212 @@ export const AdminPage: React.FC = () => {
         
         switch (activeView) {
             case 'dashboard':
-                return <DashboardView students={students} isLoading={loading} onOpenImport={() => setBulkImportOpen(true)} />;
+                return (
+                    <DashboardView
+                        students={students}
+                        skillSettings={skillSettings}
+                        isLoading={loading}
+                        onOpenImport={() => setBulkImportOpen(true)}
+                        onNavigateToSettings={() => setActiveView('skill-settings')}
+                        onToggleSkill={handleToggleSkillDisabled}
+                    />
+                );
+            
+            case 'skill-settings': {
+                const totalSkills = LIFE_SKILL_OPTIONS.length;
+                const closedSkills = skillSettings.filter(s => s.disabled).length;
+                const openSkills = totalSkills - closedSkills;
+
+                return (
+                    <div className="space-y-6 animate-fade-in">
+                        {/* Title & Quick Actions */}
+                        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
+                                        <i className="fa-solid fa-sliders text-sm"></i>
+                                    </div>
+                                    <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
+                                        Pengaturan Kuota & Status Life Skill
+                                    </h2>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                                    Nonaktifkan pilihan program yang kuotanya dirasa sudah penuh agar murid tidak dapat memilihnya pada formulir pendaftaran. Pengaturan ini berlaku secara instan dan otomatis tersinkronisasi.
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+                                <button
+                                    type="button"
+                                    onClick={() => handleBatchSetSkillStatus(false)}
+                                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                    title="Buka semua pendaftaran program life skill"
+                                >
+                                    <i className="fa-solid fa-circle-check text-emerald-600"></i>
+                                    <span>Buka Semua</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleBatchSetSkillStatus(true)}
+                                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                    title="Tutup semua pendaftaran program life skill"
+                                >
+                                    <i className="fa-solid fa-ban text-rose-600"></i>
+                                    <span>Tutup Semua</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Status Summary Banner */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 text-base">
+                                        <i className="fa-solid fa-layer-group"></i>
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Program</p>
+                                        <p className="text-xl font-extrabold text-slate-800">{totalSkills} Kategori</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-base">
+                                        <i className="fa-solid fa-door-open"></i>
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Pendaftaran Aktif / Buka</p>
+                                        <p className="text-xl font-extrabold text-emerald-700">{openSkills} Program</p>
+                                    </div>
+                                </div>
+                                <span className="px-2 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-lg">Tersedia</span>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-base">
+                                        <i className="fa-solid fa-lock"></i>
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Ditutup / Kuota Penuh</p>
+                                        <p className="text-xl font-extrabold text-rose-700">{closedSkills} Program</p>
+                                    </div>
+                                </div>
+                                <span className="px-2 py-1 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-lg">Nonaktif</span>
+                            </div>
+                        </div>
+
+                        {/* 6 Program Cards Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {LIFE_SKILL_OPTIONS.map(skill => {
+                                const setting = skillSettings.find(s => s.skill === skill);
+                                const isDisabled = setting ? Boolean(setting.disabled) : false;
+                                const reason = setting?.reason || '';
+                                const meta = SKILL_ICONS[skill] || {
+                                    icon: 'fa-star',
+                                    bg: 'bg-indigo-50',
+                                    text: 'text-indigo-600',
+                                    border: 'border-indigo-200',
+                                    desc: 'Program Keterampilan Life Skill MA NU 01 Banyuputih'
+                                };
+                                const studentCount = students.filter(s => s.lifeSkill === skill || (s.lifeSkill as string === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
+
+                                return (
+                                    <div 
+                                        key={skill} 
+                                        className={`p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between ${
+                                            isDisabled 
+                                                ? 'bg-rose-50/30 border-rose-200 shadow-xs' 
+                                                : 'bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-md'
+                                        }`}
+                                    >
+                                        <div>
+                                            {/* Card Top */}
+                                            <div className="flex items-start justify-between gap-3 mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${isDisabled ? 'bg-rose-100 text-rose-700' : `${meta.bg} ${meta.text}`}`}>
+                                                        <i className={`fa-solid ${meta.icon}`}></i>
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-bold text-slate-800 text-sm">{skill}</h3>
+                                                        <p className="text-[11px] text-slate-500 font-medium">
+                                                            <span className="font-bold text-indigo-600">{studentCount}</span> Siswa Terdaftar
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Status Badge */}
+                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1 ${
+                                                    isDisabled 
+                                                        ? 'bg-rose-100 text-rose-800 border border-rose-200' 
+                                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                }`}>
+                                                    <i className={`fa-solid ${isDisabled ? 'fa-lock' : 'fa-check'} text-[9px]`}></i>
+                                                    <span>{isDisabled ? 'DITUTUP' : 'BUKA'}</span>
+                                                </span>
+                                            </div>
+
+                                            <p className="text-xs text-slate-500 line-clamp-2 mb-4 leading-relaxed">
+                                                {meta.desc}
+                                            </p>
+
+                                            {/* Reason info if disabled */}
+                                            {isDisabled && (
+                                                <div className="mb-4 p-2.5 rounded-xl bg-rose-100/70 border border-rose-200 text-rose-900 text-xs flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <i className="fa-solid fa-circle-exclamation text-rose-600 flex-shrink-0 text-[11px]"></i>
+                                                        <span className="truncate font-medium">
+                                                            Keterangan: <b>{reason || 'Kuota Penuh'}</b>
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleEditSkillReason(skill, reason)}
+                                                        className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 text-[10px] font-bold rounded-lg border border-rose-300 transition flex-shrink-0 cursor-pointer"
+                                                        title="Ubah teks keterangan"
+                                                    >
+                                                        Ubah
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Toggle Action Control */}
+                                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setFilter(skill);
+                                                    setActiveView('report-lifeskill');
+                                                }}
+                                                className="text-xs font-semibold text-slate-500 hover:text-indigo-600 transition flex items-center gap-1 cursor-pointer"
+                                            >
+                                                <i className="fa-solid fa-list-check text-[10px]"></i>
+                                                <span>Lihat Siswa</span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => handleToggleSkillDisabled(skill, isDisabled, reason)}
+                                                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs active:scale-95 cursor-pointer ${
+                                                    isDisabled
+                                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                                        : 'bg-rose-600 hover:bg-rose-700 text-white'
+                                                }`}
+                                            >
+                                                <i className={`fa-solid ${isDisabled ? 'fa-lock-open' : 'fa-ban'} text-[10px]`}></i>
+                                                <span>{isDisabled ? 'Buka Pendaftaran' : 'Tutup (Kuota Penuh)'}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            }
             
             case 'master-data': {
                 const filteredIds = filteredAndSortedStudents.map(s => s.id);
@@ -1157,6 +1517,10 @@ export const AdminPage: React.FC = () => {
         setSelectedStudentIds([]);
     };
 
+    const closedSkillsCount = useMemo(() => {
+        return skillSettings.filter(s => s.disabled).length;
+    }, [skillSettings]);
+
     return (
         <div className="h-screen bg-slate-100 flex overflow-hidden">
             {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden" onClick={() => setSidebarOpen(false)}></div>}
@@ -1176,6 +1540,13 @@ export const AdminPage: React.FC = () => {
                 <ul className="flex-1 p-2 space-y-1 overflow-y-auto">
                     <NavItem iconClass="fa-solid fa-grip" text="Dashboard" active={activeView === 'dashboard'} onClick={() => changeView('dashboard')} />
                     <NavItem iconClass="fa-solid fa-users-gear" text="Master Data & Import" active={activeView === 'master-data'} onClick={() => changeView('master-data')} />
+                    <NavItem 
+                        iconClass="fa-solid fa-sliders" 
+                        text="Pengaturan Life Skill" 
+                        active={activeView === 'skill-settings'} 
+                        onClick={() => changeView('skill-settings')}
+                        badge={closedSkillsCount > 0 ? `${closedSkillsCount} Tutup` : undefined}
+                    />
                     <NavItem iconClass="fa-solid fa-users" text="Laporan per Kelas" active={activeView === 'report-class'} onClick={() => changeView('report-class')} />
                     <NavItem iconClass="fa-solid fa-award" text="Laporan Life Skill" active={activeView === 'report-lifeskill'} onClick={() => changeView('report-lifeskill')} />
                     <NavItem iconClass="fa-solid fa-table-list" text="Laporan Rekap" active={activeView === 'summary'} onClick={() => changeView('summary')} />
@@ -1185,7 +1556,7 @@ export const AdminPage: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleRefreshData}
-                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 transition cursor-pointer"
                             title="Muat Ulang / Sinkronkan Data dari Database Server"
                         >
                             <i className="fa-solid fa-arrows-rotate text-emerald-400"></i>
@@ -1195,7 +1566,7 @@ export const AdminPage: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleClearAllData}
-                            className="w-full bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 hover:border-rose-800 transition"
+                            className="w-full bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 hover:border-rose-800 transition cursor-pointer"
                             title="Kosongkan Semua Data Master Siswa"
                         >
                             <i className="fa-solid fa-trash-can text-rose-400"></i>
@@ -1205,7 +1576,7 @@ export const AdminPage: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleChangePassword}
-                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 transition"
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 border border-slate-700 transition cursor-pointer"
                             title="Ganti Username atau Password Administrator"
                         >
                             <i className="fa-solid fa-key text-amber-400"></i>
@@ -1257,7 +1628,7 @@ const ThSortable: React.FC<{
 
     return (
         <th className={`py-3 px-3 text-left text-xs font-bold text-slate-600 ${className}`}>
-            <button onClick={() => onRequestSort(sortKey)} className="group inline-flex items-center gap-1.5 focus:outline-none">
+            <button onClick={() => onRequestSort(sortKey)} className="group inline-flex items-center gap-1.5 focus:outline-none cursor-pointer">
                 <span>{title}</span>
                 <span className={`transition-opacity ${isActive ? 'opacity-100 text-indigo-600' : 'opacity-30 text-slate-400 group-hover:opacity-100'}`}>
                     {icon}
@@ -1267,11 +1638,18 @@ const ThSortable: React.FC<{
     );
 };
 
-const NavItem = ({ iconClass, text, active = false, onClick }: { iconClass: string; text: string; active?: boolean; onClick: () => void; }) => (
+const NavItem = ({ iconClass, text, active = false, onClick, badge }: { iconClass: string; text: string; active?: boolean; onClick: () => void; badge?: string | number; }) => (
     <li>
-        <button onClick={onClick} className={`flex items-center w-full p-2.5 my-0.5 rounded-xl transition-all duration-200 text-xs ${active ? 'bg-indigo-600 text-white font-bold shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'}`}>
-            <i className={`${iconClass} fa-fw w-5 text-center mr-2.5 flex-shrink-0`}></i>
-            <span className="truncate">{text}</span>
+        <button onClick={onClick} className={`flex items-center justify-between w-full p-2.5 my-0.5 rounded-xl transition-all duration-200 text-xs cursor-pointer ${active ? 'bg-indigo-600 text-white font-bold shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'}`}>
+            <div className="flex items-center min-w-0">
+                <i className={`${iconClass} fa-fw w-5 text-center mr-2.5 flex-shrink-0`}></i>
+                <span className="truncate">{text}</span>
+            </div>
+            {badge !== undefined && badge !== null && (
+                <span className={`ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${active ? 'bg-white text-indigo-700' : 'bg-rose-500 text-white'}`}>
+                    {badge}
+                </span>
+            )}
         </button>
     </li>
 );
@@ -1394,7 +1772,14 @@ const StatCard: React.FC<{ title: string; value: string | number; color: string;
     </div>
 );
 
-const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenImport: () => void }> = ({ students, isLoading, onOpenImport }) => {
+const DashboardView: React.FC<{ 
+    students: Student[]; 
+    skillSettings: SkillSetting[];
+    isLoading: boolean; 
+    onOpenImport: () => void;
+    onNavigateToSettings: () => void;
+    onToggleSkill: (skill: LifeSkill, currentlyDisabled: boolean, currentReason?: string) => void;
+}> = ({ students, skillSettings, isLoading, onOpenImport, onNavigateToSettings, onToggleSkill }) => {
     const totalMasterStudents = students.length;
     const registeredStudents = students.filter(s => s.lifeSkill && s.lifeSkill.trim() !== '');
     const unregisteredStudents = students.filter(s => !s.lifeSkill || s.lifeSkill.trim() === '');
@@ -1442,11 +1827,20 @@ const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenI
                     <p className="text-xs text-slate-500 mt-0.5">Pemantauan partisipasi dan status pemilihan program Life Skill siswa.</p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={onNavigateToSettings}
+                        className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        title="Buka menu pengaturan status program"
+                    >
+                        <i className="fa-solid fa-sliders"></i>
+                        <span>Pengaturan Status & Kuota</span>
+                    </button>
                     <button
                         type="button"
                         onClick={onOpenImport}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                         <i className="fa-solid fa-cloud-arrow-up"></i>
                         <span>Upload Excel Siswa</span>
@@ -1488,23 +1882,67 @@ const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenI
 
             {/* Program Cards */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-4">
                     <div>
                         <h3 className="text-lg font-bold text-slate-800">Jumlah Pendaftar 6 Program Life Skill</h3>
-                        <p className="text-xs text-slate-500">Live monitoring jumlah siswa tiap kelas keterampilan</p>
+                        <p className="text-xs text-slate-500">Live monitoring jumlah siswa tiap kelas keterampilan beserta status pendaftaran</p>
                     </div>
+                    <button
+                        type="button"
+                        onClick={onNavigateToSettings}
+                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+                    >
+                        <i className="fa-solid fa-sliders text-[11px]"></i>
+                        <span>Kelola Kuota / Status Program</span>
+                    </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                     {LIFE_SKILL_OPTIONS.map((skill) => {
                         const count = registeredStudents.filter(s => s.lifeSkill === skill || (s.lifeSkill as string === 'Tata Busana' && skill === LifeSkill.CLOTHING_LINE)).length;
+                        const setting = skillSettings.find(s => s.skill === skill);
+                        const isDisabled = setting ? Boolean(setting.disabled) : false;
+                        const reason = setting?.reason || '';
+                        const meta = SKILL_ICONS[skill];
 
                         return (
-                            <div key={skill} className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:shadow-xs transition-all">
-                                <div className="flex justify-between items-start mb-2">
-                                    <span className="font-bold text-slate-800 text-xs">{skill}</span>
+                            <div 
+                                key={skill} 
+                                className={`p-4 rounded-xl border transition-all ${
+                                    isDisabled 
+                                        ? 'border-rose-200 bg-rose-50/40' 
+                                        : 'border-slate-200 bg-slate-50/70 hover:bg-white hover:shadow-xs'
+                                }`}
+                            >
+                                <div className="flex justify-between items-start mb-2 gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0 ${isDisabled ? 'bg-rose-100 text-rose-700' : `${meta?.bg || 'bg-slate-100'} ${meta?.text || 'text-slate-700'}`}`}>
+                                            <i className={`fa-solid ${meta?.icon || 'fa-award'}`}></i>
+                                        </div>
+                                        <span className="font-bold text-slate-800 text-xs truncate">{skill}</span>
+                                    </div>
+
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex-shrink-0 inline-flex items-center gap-1 ${
+                                        isDisabled 
+                                            ? 'bg-rose-100 text-rose-700 border border-rose-200' 
+                                            : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                    }`}>
+                                        <i className={`fa-solid ${isDisabled ? 'fa-lock' : 'fa-check'} text-[8px]`}></i>
+                                        <span>{isDisabled ? 'Penuh / Tutup' : 'Buka'}</span>
+                                    </span>
                                 </div>
-                                <div className="flex justify-between text-[11px] text-slate-600 font-medium">
-                                    <span>{count} Siswa</span>
+                                <div className="flex justify-between items-center text-[11px] text-slate-600 font-medium mt-3 pt-2 border-t border-slate-100">
+                                    <span className="font-bold text-indigo-700">{count} Siswa Terdaftar</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => onToggleSkill(skill, isDisabled, reason)}
+                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                                            isDisabled 
+                                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                                                : 'bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700'
+                                        }`}
+                                    >
+                                        {isDisabled ? 'Buka Kembali' : 'Tutup Pilihan'}
+                                    </button>
                                 </div>
                             </div>
                         );

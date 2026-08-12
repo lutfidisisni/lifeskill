@@ -76,6 +76,7 @@ export const getStoredStudents = (): Student[] => {
 
 export const useStudents = () => {
     const [students, setStudents] = useState<Student[]>(getStoredStudents);
+    const [skillSettings, setSkillSettings] = useState<SkillSetting[]>(getStoredSkillSettings);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -91,6 +92,33 @@ export const useStudents = () => {
             console.error('Failed to save students to localStorage:', e);
         }
     };
+
+    // Save skill settings to localStorage
+    const saveSkillSettings = (updated: SkillSetting[]) => {
+        setSkillSettings(updated);
+        try {
+            localStorage.setItem(SKILL_SETTINGS_STORAGE_KEY, JSON.stringify(updated));
+            window.dispatchEvent(new Event('manusa_skill_settings_updated'));
+        } catch (e) {
+            console.error('Failed to save skill settings to localStorage:', e);
+        }
+    };
+
+    const fetchSkillSettings = useCallback(async () => {
+        try {
+            const response = await fetch(SKILL_SETTINGS_API_URL);
+            if (response.ok) {
+                const data: SkillSetting[] = await response.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    saveSkillSettings(data);
+                    return data;
+                }
+            }
+        } catch (e) {
+            console.warn('Could not fetch skill settings from API, using local:', e);
+        }
+        return getStoredSkillSettings();
+    }, []);
 
     const fetchStudents = useCallback(async () => {
         setLoading(true);
@@ -131,7 +159,25 @@ export const useStudents = () => {
 
     useEffect(() => {
         fetchStudents();
-    }, [fetchStudents]);
+        fetchSkillSettings();
+
+        const handleSettingsUpdate = () => {
+            setSkillSettings(getStoredSkillSettings());
+        };
+        const handleDataUpdate = () => {
+            setStudents(getStoredStudents());
+        };
+
+        window.addEventListener('manusa_skill_settings_updated', handleSettingsUpdate);
+        window.addEventListener('manusa_data_updated', handleDataUpdate);
+        window.addEventListener('storage', handleSettingsUpdate);
+
+        return () => {
+            window.removeEventListener('manusa_skill_settings_updated', handleSettingsUpdate);
+            window.removeEventListener('manusa_data_updated', handleDataUpdate);
+            window.removeEventListener('storage', handleSettingsUpdate);
+        };
+    }, [fetchStudents, fetchSkillSettings]);
 
     // Student Lookup by NIS (Used during registration)
     const lookupStudentByNIS = async (nis: string): Promise<{
@@ -234,6 +280,12 @@ export const useStudents = () => {
         }
 
         // Fallback local update
+        const currentSettings = getStoredSkillSettings();
+        const targetSetting = currentSettings.find(s => s.skill === lifeSkill);
+        if (targetSetting && targetSetting.disabled) {
+            throw new Error(`Pendaftaran program "${lifeSkill}" saat ini telah ditutup / kuota penuh. Silakan pilih program Life Skill lainnya.`);
+        }
+
         const currentList = getStoredStudents();
         const index = currentList.findIndex(s => s.nis && s.nis.trim().toLowerCase() === cleanNIS.toLowerCase());
 
@@ -501,13 +553,76 @@ export const useStudents = () => {
         saveStudents([]);
     };
 
+    // Admin: Update single skill setting (toggle disabled / reason)
+    const updateSkillSetting = async (skill: LifeSkill, disabled: boolean, reason: string = ''): Promise<SkillSetting[]> => {
+        const current = getStoredSkillSettings();
+        const updated = current.map(s => s.skill === skill ? { ...s, disabled, reason } : s);
+        
+        const token = getToken();
+        if (token) {
+            try {
+                const res = await fetch(SKILL_SETTINGS_API_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ skill, disabled, reason }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.settings && Array.isArray(data.settings)) {
+                        saveSkillSettings(data.settings);
+                        return data.settings;
+                    }
+                }
+            } catch (e) {
+                console.warn('Server offline, saving skill setting locally:', e);
+            }
+        }
+
+        saveSkillSettings(updated);
+        return updated;
+    };
+
+    // Admin: Update all skill settings in batch
+    const updateAllSkillSettings = async (newSettings: SkillSetting[]): Promise<SkillSetting[]> => {
+        const token = getToken();
+        if (token) {
+            try {
+                const res = await fetch(SKILL_SETTINGS_API_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ settings: newSettings }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.settings && Array.isArray(data.settings)) {
+                        saveSkillSettings(data.settings);
+                        return data.settings;
+                    }
+                }
+            } catch (e) {
+                console.warn('Server offline, saving all skill settings locally:', e);
+            }
+        }
+
+        saveSkillSettings(newSettings);
+        return newSettings;
+    };
+
     return { 
         students, 
         registeredStudents: students.filter(s => s.lifeSkill && s.lifeSkill.trim() !== ''),
         unregisteredStudents: students.filter(s => !s.lifeSkill || s.lifeSkill.trim() === ''),
+        skillSettings,
         loading, 
         error, 
         fetchStudents, 
+        fetchSkillSettings,
         lookupStudentByNIS,
         chooseLifeSkill,
         addStudent, 
@@ -516,6 +631,8 @@ export const useStudents = () => {
         deleteBulkStudents,
         resetStudentChoices,
         bulkImportStudents,
-        clearAllStudents
+        clearAllStudents,
+        updateSkillSetting,
+        updateAllSkillSettings
     };
 };

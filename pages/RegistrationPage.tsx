@@ -54,7 +54,7 @@ const SKILL_ICONS: Record<string, { icon: string; bg: string; text: string; bord
 };
 
 export const RegistrationPage: React.FC = () => {
-    const { lookupStudentByNIS, chooseLifeSkill, students } = useStudents();
+    const { lookupStudentByNIS, chooseLifeSkill, students, skillSettings } = useStudents();
 
     // Verification & Selection State
     const [inputNis, setInputNis] = useState('');
@@ -120,6 +120,22 @@ export const RegistrationPage: React.FC = () => {
 
     const handleSelectSkillCard = (skill: LifeSkill) => {
         if (alreadySelected) return;
+        const setting = skillSettings.find(s => s.skill === skill);
+        if (setting && setting.disabled) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Pendaftaran Ditutup',
+                html: `
+                    <div style="font-size: 14px; color: #334155;">
+                        <p>Pendaftaran untuk program <b>"${skill}"</b> saat ini telah ditutup / kuota terpenuhi.</p>
+                        ${setting.reason ? `<p style="margin-top: 8px; font-size: 12px; color: #64748b; background: #f8fafc; padding: 6px 12px; border-radius: 8px; border: 1px solid #e2e8f0;"><b>Keterangan:</b> ${setting.reason}</p>` : ''}
+                        <p style="margin-top: 10px; color: #4f46e5; font-weight: 600;">Silakan pilih salah satu program Life Skill lainnya yang masih aktif.</p>
+                    </div>
+                `,
+                confirmButtonColor: '#4f46e5',
+            });
+            return;
+        }
         setSelectedProgram(skill);
     };
 
@@ -144,6 +160,18 @@ export const RegistrationPage: React.FC = () => {
                 text: 'Silakan klik salah satu kartu program Life Skill di bawah untuk memilih.',
                 confirmButtonColor: '#4f46e5',
             });
+            return;
+        }
+
+        const currentSetting = skillSettings.find(s => s.skill === selectedProgram);
+        if (currentSetting && currentSetting.disabled) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Program Ditutup',
+                text: `Pendaftaran program "${selectedProgram}" telah ditutup / kuota penuh. Silakan pilih program lainnya.`,
+                confirmButtonColor: '#4f46e5',
+            });
+            setSelectedProgram('');
             return;
         }
 
@@ -569,40 +597,71 @@ export const RegistrationPage: React.FC = () => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {LIFE_SKILL_OPTIONS.map((skill) => {
                                     const isSelected = selectedProgram === skill;
+                                    const setting = skillSettings.find(s => s.skill === skill);
+                                    const isDisabled = Boolean(setting?.disabled);
                                     const meta = SKILL_ICONS[skill] || { icon: 'fa-star', bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200', desc: '' };
 
                                     return (
                                         <div
                                             key={skill}
                                             onClick={() => handleSelectSkillCard(skill)}
-                                            className={`p-4 rounded-2xl border-2 transition-all relative flex flex-col justify-between cursor-pointer select-none ${
-                                                isSelected
-                                                    ? 'bg-indigo-50/70 border-indigo-600 shadow-md ring-2 ring-indigo-400/30 scale-[1.02]'
-                                                    : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs'
+                                            className={`p-4 rounded-2xl border-2 transition-all relative flex flex-col justify-between select-none ${
+                                                isDisabled
+                                                    ? 'bg-slate-100/80 border-slate-200 opacity-75 cursor-not-allowed grayscale-[0.2]'
+                                                    : isSelected
+                                                    ? 'bg-indigo-50/70 border-indigo-600 shadow-md ring-2 ring-indigo-400/30 scale-[1.02] cursor-pointer'
+                                                    : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs cursor-pointer'
                                             }`}
                                         >
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <span className={`w-9 h-9 rounded-xl ${meta.bg} ${meta.text} flex items-center justify-center text-base shadow-xs`}>
+                                                    <span className={`w-9 h-9 rounded-xl ${isDisabled ? 'bg-slate-200 text-slate-500' : `${meta.bg} ${meta.text}`} flex items-center justify-center text-base shadow-xs`}>
                                                         <i className={`fa-solid ${meta.icon}`}></i>
                                                     </span>
+                                                    {isDisabled ? (
+                                                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-extrabold flex items-center gap-1 border border-rose-200 shadow-xs">
+                                                            <i className="fa-solid fa-lock text-[9px]"></i>
+                                                            <span>Penuh / Ditutup</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 flex items-center gap-1">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                            <span>Tersedia</span>
+                                                        </span>
+                                                    )}
                                                 </div>
 
-                                                <h4 className="font-extrabold text-sm text-slate-800">
+                                                <h4 className={`font-extrabold text-sm ${isDisabled ? 'text-slate-600 line-through decoration-rose-400/60' : 'text-slate-800'}`}>
                                                     {skill}
                                                 </h4>
                                                 <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">
                                                     {meta.desc}
                                                 </p>
+                                                {isDisabled && setting?.reason && (
+                                                    <p className="text-[10px] text-rose-600 mt-1.5 font-medium italic">
+                                                        * {setting.reason}
+                                                    </p>
+                                                )}
                                             </div>
 
-                                            <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-end">
+                                            <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                                                {isDisabled ? (
+                                                    <span className="text-[11px] text-rose-600 font-bold flex items-center gap-1">
+                                                        <i className="fa-solid fa-ban text-[10px]"></i> Tidak dapat dipilih
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[11px] text-indigo-600 font-semibold">
+                                                        {isSelected ? 'Terpilih' : 'Klik untuk memilih'}
+                                                    </span>
+                                                )}
                                                 <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-xs ${
-                                                    isSelected 
+                                                    isDisabled
+                                                        ? 'border-slate-300 bg-slate-200 text-slate-400'
+                                                        : isSelected 
                                                         ? 'bg-indigo-600 border-indigo-600 text-white' 
                                                         : 'border-slate-300 text-transparent'
                                                 }`}>
-                                                    <i className="fa-solid fa-check text-[10px]"></i>
+                                                    <i className={`fa-solid ${isDisabled ? 'fa-lock text-[8px]' : 'fa-check text-[10px]'}`}></i>
                                                 </div>
                                             </div>
                                         </div>
