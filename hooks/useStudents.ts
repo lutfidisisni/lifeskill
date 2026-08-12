@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Student, LifeSkill } from '../types';
-import { API_BASE_URL, INITIAL_MASTER_STUDENTS } from '../constants';
+import type { Student, LifeSkill, SkillSetting } from '../types';
+import { API_BASE_URL, INITIAL_MASTER_STUDENTS, LIFE_SKILL_OPTIONS } from '../constants';
 
 const API_STUDENTS_URL = `${API_BASE_URL}/students`;
 const BULK_DELETE_API_URL = `${API_BASE_URL}/students-bulk-delete`;
@@ -9,10 +9,36 @@ const BULK_IMPORT_API_URL = `${API_BASE_URL}/students-bulk-import`;
 const CLEAR_ALL_API_URL = `${API_BASE_URL}/students-clear-all`;
 const LOOKUP_NIS_API_URL = `${API_BASE_URL}/lookup-nis`;
 const CHOOSE_SKILL_API_URL = `${API_BASE_URL}/choose-skill`;
+const SKILL_SETTINGS_API_URL = `${API_BASE_URL}/skill-settings`;
 
 const STORAGE_KEY = 'manusa_master_students_v3';
 const LEGACY_V2_KEY = 'manusa_students_data_v2';
 const LEGACY_V1_KEY = 'manusa_students_data_v1';
+const SKILL_SETTINGS_STORAGE_KEY = 'manusa_skill_settings_v1';
+
+export const DEFAULT_SKILL_SETTINGS: SkillSetting[] = LIFE_SKILL_OPTIONS.map(skill => ({
+    skill,
+    disabled: false,
+    reason: ''
+}));
+
+export const getStoredSkillSettings = (): SkillSetting[] => {
+    try {
+        const stored = localStorage.getItem(SKILL_SETTINGS_STORAGE_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                // Ensure all default skills exist
+                const skillMap = new Map(parsed.map((item: any) => [item.skill, item]));
+                return DEFAULT_SKILL_SETTINGS.map(def => skillMap.get(def.skill) || def);
+            }
+        }
+        return DEFAULT_SKILL_SETTINGS;
+    } catch (e) {
+        console.error('Error reading skill settings from localStorage:', e);
+        return DEFAULT_SKILL_SETTINGS;
+    }
+};
 
 export const getStoredStudents = (): Student[] => {
     try {

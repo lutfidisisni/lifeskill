@@ -35,3 +35,9 @@ export interface MasterStudentImportItem {
     jenisKelamin: string;
     whatsappNumber?: string;
 }
+
+export interface SkillSetting {
+    skill: LifeSkill;
+    disabled: boolean;
+    reason?: string;
+}

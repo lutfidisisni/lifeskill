@@ -37,7 +37,26 @@ db.exec(`
         lifeSkill TEXT,
         createdAt TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS skill_settings (
+        skill TEXT PRIMARY KEY,
+        disabled INTEGER DEFAULT 0,
+        reason TEXT DEFAULT ''
+    );
 `);
+
+// Seed default skill settings if empty
+const DEFAULT_SKILLS = [
+    "Desain Grafis",
+    "Otomotif",
+    "Tata Boga",
+    "Clothing Line",
+    "Setir Mobil",
+    "Tata Rias"
+];
+for (const skillName of DEFAULT_SKILLS) {
+    db.prepare('INSERT OR IGNORE INTO skill_settings (skill, disabled, reason) VALUES (?, 0, ?)').run(skillName, '');
+}
 
 // Seed admin
 const adminRow = db.prepare('SELECT * FROM admins WHERE username = ?').get('admin');
@@ -226,6 +245,15 @@ app.post('/api/choose-skill', (req, res) => {
     try {
         db.exec('BEGIN TRANSACTION');
         
+        // Check if skill is disabled by Admin (e.g. quota full)
+        const skillRow = db.prepare('SELECT * FROM skill_settings WHERE skill = ?').get(skill) as any;
+        if (skillRow && skillRow.disabled) {
+            db.exec('ROLLBACK');
+            return res.status(400).json({ 
+                message: `Pendaftaran program "${skill}" saat ini telah ditutup / kuota penuh. Silakan pilih program Life Skill lainnya.` 
+            });
+        }
+
         const student = db.prepare('SELECT * FROM students WHERE nis = ?').get(nis) as any;
         if (!student) {
             db.exec('ROLLBACK');
@@ -246,6 +274,49 @@ app.post('/api/choose-skill', (req, res) => {
     } catch (e: any) {
         try { db.exec('ROLLBACK'); } catch (_) {}
         res.status(500).json({ message: 'Gagal menyimpan pilihan' });
+    }
+});
+
+// --- Skill Settings Endpoints ---
+app.get('/api/skill-settings', (req, res) => {
+    try {
+        const rows = db.prepare('SELECT * FROM skill_settings').all() as any[];
+        const settings = rows.map(r => ({
+            skill: r.skill,
+            disabled: Boolean(r.disabled),
+            reason: r.reason || ''
+        }));
+        res.json(settings);
+    } catch (e: any) {
+        res.status(500).json({ message: e.message });
+    }
+});
+
+app.put('/api/skill-settings', authenticate, (req: any, res: any) => {
+    const { skill, disabled, reason, settings } = req.body;
+    try {
+        if (Array.isArray(settings)) {
+            const stmt = db.prepare('INSERT INTO skill_settings (skill, disabled, reason) VALUES (?, ?, ?) ON CONFLICT(skill) DO UPDATE SET disabled=excluded.disabled, reason=excluded.reason');
+            db.exec('BEGIN TRANSACTION');
+            for (const s of settings) {
+                stmt.run(s.skill, s.disabled ? 1 : 0, s.reason || '');
+            }
+            db.exec('COMMIT');
+        } else if (skill) {
+            db.prepare('INSERT INTO skill_settings (skill, disabled, reason) VALUES (?, ?, ?) ON CONFLICT(skill) DO UPDATE SET disabled=excluded.disabled, reason=excluded.reason')
+              .run(skill, disabled ? 1 : 0, reason || '');
+        }
+
+        const rows = db.prepare('SELECT * FROM skill_settings').all() as any[];
+        const updatedSettings = rows.map(r => ({
+            skill: r.skill,
+            disabled: Boolean(r.disabled),
+            reason: r.reason || ''
+        }));
+        res.json({ message: 'Pengaturan Life Skill berhasil diperbarui', settings: updatedSettings });
+    } catch (e: any) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
+        res.status(500).json({ message: 'Gagal menyimpan pengaturan Life Skill' });
     }
 });
 
