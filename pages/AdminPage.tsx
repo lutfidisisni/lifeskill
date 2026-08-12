@@ -1400,8 +1400,6 @@ const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenI
     const unregisteredStudents = students.filter(s => !s.lifeSkill || s.lifeSkill.trim() === '');
     
     const totalSelected = registeredStudents.length;
-    const totalCapacity = 285;
-    const totalRemaining = Math.max(0, totalCapacity - totalSelected);
     const totalMale = registeredStudents.filter(s => s.jenisKelamin === 'Laki-laki').length;
     const totalFemale = registeredStudents.filter(s => s.jenisKelamin === 'Perempuan').length;
 
@@ -1441,7 +1439,7 @@ const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenI
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
                     <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Dashboard & Monitoring</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Pemantauan pengisian kuota Life Skill dan status pemilihan siswa.</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Pemantauan partisipasi dan status pemilihan program Life Skill siswa.</p>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1467,17 +1465,17 @@ const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenI
                 />
                 <StatCard 
                     title="Siswa Sudah Memilih" 
-                    value={`${totalSelected} / ${totalCapacity}`} 
-                    subValue={`Terisi ${((totalSelected / (totalCapacity || 1)) * 100).toFixed(1)}%`}
+                    value={totalSelected} 
+                    subValue={`${((totalSelected / (totalMasterStudents || 1)) * 100).toFixed(1)}% dari total master siswa`}
                     color="border-emerald-500" 
                     icon="fa-solid fa-circle-check"
                 />
                 <StatCard 
-                    title="Sisa Kuota Tersedia" 
-                    value={`${totalRemaining} Kursi`} 
-                    subValue="Dari total 6 program pilihan"
+                    title="Siswa Belum Memilih" 
+                    value={unregisteredStudents.length} 
+                    subValue={`${((unregisteredStudents.length / (totalMasterStudents || 1)) * 100).toFixed(1)}% belum menentukan pilihan`}
                     color="border-amber-500" 
-                    icon="fa-solid fa-chair"
+                    icon="fa-solid fa-user-clock"
                 />
                 <StatCard 
                     title="Gender Pendaftar" 
@@ -1488,7 +1486,7 @@ const DashboardView: React.FC<{ students: Student[]; isLoading: boolean; onOpenI
                 />
             </div>
 
-            {/* Quota Cards */}
+            {/* Program Cards */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
                 <div className="flex items-center justify-between mb-4">
                     <div>
