@@ -703,16 +703,33 @@ export const AdminPage: React.FC = () => {
         }
         
         const title = `DAFTAR HADIR PESERTA LIFE SKILL ${selectedLifeSkillForAttendance.toUpperCase()}`;
-        const dateLine = `<p style="font-size: 11pt; margin-bottom: 15px; font-weight: bold;">Hari/Tanggal: .......................................</p>`;
+        const dateLine = `
+            <div style="display: flex; justify-content: space-between; font-size: 10.5pt; margin-bottom: 15px; font-weight: bold;">
+                <div>Keterampilan: ${selectedLifeSkillForAttendance}</div>
+                <div>Tahun Pelajaran: 2026/2027</div>
+            </div>
+        `;
 
         const tableHeader = `
             <thead>
                 <tr>
-                    <th style="width: 5%;">No.</th>
-                    <th style="width: 15%;">NIS</th>
-                    <th>Nama Lengkap</th>
-                    <th style="width: 12%;">Kelas</th>
-                    <th style="width: 25%;">Tanda Tangan</th>
+                    <th rowspan="2" style="width: 5%; text-align: center; vertical-align: middle;">No.</th>
+                    <th rowspan="2" style="width: 12%; text-align: center; vertical-align: middle;">NIS</th>
+                    <th rowspan="2" style="text-align: left; vertical-align: middle;">Nama Lengkap</th>
+                    <th rowspan="2" style="width: 10%; text-align: center; vertical-align: middle;">Kelas</th>
+                    <th colspan="10" style="text-align: center; vertical-align: middle; padding: 4px 0;">PERTEMUAN KE</th>
+                </tr>
+                <tr>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">1</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">2</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">3</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">4</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">5</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">6</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">7</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">8</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">9</th>
+                    <th style="width: 4%; text-align: center; font-size: 9pt; font-weight: bold;">10</th>
                 </tr>
             </thead>`;
         
@@ -720,11 +737,20 @@ export const AdminPage: React.FC = () => {
             <tbody>
                 ${attendanceStudents.map((s, index) => `
                     <tr>
-                        <td style="text-align: center;">${index + 1}</td>
-                        <td style="text-align: center; font-family: monospace; font-weight: bold;">${s.nis || '-'}</td>
-                        <td>${s.fullName}</td>
-                        <td style="text-align: center;">${s.classLevel}</td>
-                        <td>${index + 1}.</td>
+                        <td style="text-align: center; padding: 6px 4px;">${index + 1}</td>
+                        <td style="text-align: center; font-family: monospace; font-weight: bold; padding: 6px 4px;">${s.nis || '-'}</td>
+                        <td style="padding: 6px 8px;">${s.fullName}</td>
+                        <td style="text-align: center; padding: 6px 4px;">${s.classLevel}</td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
+                        <td style="background-color: #fff; padding: 6px 0;"></td>
                     </tr>
                 `).join('')}
             </tbody>`;
@@ -1470,27 +1496,38 @@ export const AdminPage: React.FC = () => {
                                 <h3 className="text-sm font-bold text-slate-700 mb-3">
                                     Daftar Peserta: {selectedLifeSkillForAttendance} ({attendanceStudents.length} siswa)
                                 </h3>
-                                <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-96">
+                                <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-120">
                                     <table className="min-w-full bg-white text-xs">
-                                        <thead className="bg-slate-100 sticky top-0 border-b border-slate-200">
+                                        <thead className="bg-slate-100 sticky top-0 border-b border-slate-200 text-slate-700">
                                             <tr>
-                                                <th className="py-2.5 px-4 text-center w-12">No.</th>
-                                                <th className="py-2.5 px-4 text-left">NIS</th>
-                                                <th className="py-2.5 px-4 text-left">Nama Lengkap</th>
-                                                <th className="py-2.5 px-4 text-center">Kelas</th>
+                                                <th rowSpan={2} className="py-2.5 px-3 text-center font-bold border-r border-b border-slate-200 w-12 align-middle">No.</th>
+                                                <th rowSpan={2} className="py-2.5 px-3 text-left font-bold border-r border-b border-slate-200 w-24 align-middle">NIS</th>
+                                                <th rowSpan={2} className="py-2.5 px-3 text-left font-bold border-r border-b border-slate-200 align-middle">Nama Lengkap</th>
+                                                <th rowSpan={2} className="py-2.5 px-3 text-center font-bold border-r border-b border-slate-200 w-16 align-middle">Kelas</th>
+                                                <th colSpan={10} className="py-1.5 px-2 text-center font-bold border-b border-slate-200">PERTEMUAN KE</th>
+                                            </tr>
+                                            <tr>
+                                                {[...Array(10)].map((_, i) => (
+                                                    <th key={i} className="py-1 px-1 text-center font-bold border-r border-slate-200 text-[10px] w-9">{i + 1}</th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {attendanceStudents.map((s, index) => (
                                                 <tr key={s.id} className="hover:bg-slate-50">
-                                                    <td className="py-2 px-4 text-center text-slate-400">{index + 1}</td>
-                                                    <td className="py-2 px-4 font-mono font-bold text-indigo-700">{s.nis || '-'}</td>
-                                                    <td className="py-2 px-4 font-bold text-slate-800">{s.fullName}</td>
-                                                    <td className="py-2 px-4 text-center">{s.classLevel}</td>
+                                                    <td className="py-2 px-3 text-center text-slate-400 border-r border-slate-100">{index + 1}</td>
+                                                    <td className="py-2 px-3 font-mono font-bold text-indigo-700 border-r border-slate-100">{s.nis || '-'}</td>
+                                                    <td className="py-2 px-3 font-bold text-slate-800 border-r border-slate-100">{s.fullName}</td>
+                                                    <td className="py-2 px-3 text-center border-r border-slate-100">{s.classLevel}</td>
+                                                    {[...Array(10)].map((_, i) => (
+                                                        <td key={i} className="py-2 px-1 text-center border-r border-slate-100">
+                                                            <div className="w-4 h-4 mx-auto border border-slate-200 rounded-sm bg-slate-50/50"></div>
+                                                        </td>
+                                                    ))}
                                                 </tr>
                                             ))}
                                             {attendanceStudents.length === 0 && (
-                                                <tr><td colSpan={4} className="text-center py-8 text-slate-400">Tidak ada peserta.</td></tr>
+                                                <tr><td colSpan={14} className="text-center py-8 text-slate-400">Tidak ada peserta.</td></tr>
                                             )}
                                         </tbody>
                                     </table>
