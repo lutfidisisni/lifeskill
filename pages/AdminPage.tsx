@@ -404,9 +404,12 @@ export const AdminPage: React.FC = () => {
         });
     };
 
-    const printContent = (title: string, content: string) => {
+    const printContent = (title: string, content: string, orientation: 'portrait' | 'landscape' = 'portrait') => {
         const printWindow = window.open('', '_blank');
         if (printWindow) {
+            const pageSizeRule = orientation === 'landscape'
+                ? 'size: 13in 8.5in; margin: 1cm 1cm;'
+                : 'size: 8.5in 13in; margin: 1.5cm 1.2cm;';
             const html = `
                 <html>
                 <head>
@@ -415,8 +418,11 @@ export const AdminPage: React.FC = () => {
                     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
                     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
                     <style>
-                        @media print { @page { size: 8.5in 13in; margin: 1.5cm 1.2cm; } }
-                        body { font-family: 'Plus Jakarta Sans', sans-serif; color: #000; }
+                        @media print { 
+                            @page { ${pageSizeRule} } 
+                            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        }
+                        body { font-family: 'Plus Jakarta Sans', sans-serif; color: #000; margin: 0; padding: 0; }
                         .kop-sekolah { 
                             display: flex;
                             align-items: center;
@@ -424,7 +430,7 @@ export const AdminPage: React.FC = () => {
                             text-align: left;
                             border-bottom: 3px solid black; 
                             padding-bottom: 10px; 
-                            margin-bottom: 20px; 
+                            margin-bottom: 15px; 
                         }
                         .kop-sekolah img {
                              width: 80px;
@@ -433,16 +439,17 @@ export const AdminPage: React.FC = () => {
                         }
                         .kop-sekolah .text-container { flex-grow: 1; text-align: center; }
                         .kop-sekolah h2, .kop-sekolah h3, .kop-sekolah p { margin: 0; line-height: 1.35; }
-                        .kop-sekolah h2 { font-size: 15pt; font-weight: 700; }
-                        .kop-sekolah h3 { font-size: 17pt; font-weight: 800; }
-                        .kop-sekolah p { font-size: 10pt; font-weight: 400; color: #333; }
-                        .report-main-title { text-align: center; font-size: 13pt; font-weight: bold; margin-bottom: 18px; text-transform: uppercase; text-decoration: underline; }
-                        table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+                        .kop-sekolah h2 { font-size: 14pt; font-weight: 700; }
+                        .kop-sekolah h3 { font-size: 16pt; font-weight: 800; }
+                        .kop-sekolah p { font-size: 9.5pt; font-weight: 400; color: #1e293b; }
+                        .report-main-title { text-align: center; font-size: 12pt; font-weight: bold; margin-bottom: 15px; text-transform: uppercase; text-decoration: underline; letter-spacing: 0.5px; }
+                        table { width: 100%; border-collapse: collapse; font-size: 9.5pt; page-break-inside: auto; }
+                        tr { page-break-inside: avoid; page-break-after: auto; }
                         th, td { border: 1px solid black; padding: 5px 6px; text-align: left; vertical-align: middle; }
-                        th { font-weight: bold; background-color: #f1f5f9; text-align: center; }
+                        th { font-weight: bold; background-color: #f1f5f9 !important; text-align: center; }
                         td.number, td.center { text-align: center; }
                         td.signature { width: 30%; }
-                        tfoot td { font-weight: bold; background-color: #f1f5f9; }
+                        tfoot td { font-weight: bold; background-color: #f1f5f9 !important; }
                     </style>
                 </head>
                 <body>
@@ -453,9 +460,9 @@ export const AdminPage: React.FC = () => {
                              <h3>MA NU 01 BANYUPUTIH BATANG</h3>
                              <p>Jl. Lapangan 9A Banyuputih, Kec. Banyuputih, Kab. Batang, Jawa Tengah 51271</p>
                          </div>
-                    </div>
-                    <div class="report-main-title">${title}</div>
-                    ${content}
+                     </div>
+                     <div class="report-main-title">${title}</div>
+                     ${content}
                 </body>
                 </html>
             `;
@@ -768,7 +775,7 @@ export const AdminPage: React.FC = () => {
         `;
         
         const content = dateLine + tableHtml + tutorSignature;
-        printContent(title, content);
+        printContent(title, content, 'landscape');
     };
 
     const renderContent = () => {
