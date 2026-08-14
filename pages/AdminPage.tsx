@@ -408,8 +408,8 @@ export const AdminPage: React.FC = () => {
         const printWindow = window.open('', '_blank');
         if (printWindow) {
             const pageSizeRule = orientation === 'landscape'
-                ? 'size: 13in 8.5in; margin: 1cm 1cm;'
-                : 'size: 8.5in 13in; margin: 1.5cm 1.2cm;';
+                ? 'size: 13in 8.5in; margin: 1cm;'
+                : 'size: 8.5in 13in; margin: 1cm;';
             const html = `
                 <html>
                 <head>
@@ -775,7 +775,7 @@ export const AdminPage: React.FC = () => {
         `;
         
         const content = dateLine + tableHtml + tutorSignature;
-        printContent(title, content, 'landscape');
+        printContent(title, content, 'portrait');
     };
 
     const renderContent = () => {
